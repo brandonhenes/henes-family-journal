@@ -2,22 +2,17 @@ import { useState, useEffect } from "react";
 
 const SUPABASE_URL = "https://xpvgofrtikbfvyxihviz.supabase.co";
 const SUPABASE_KEY = "sb_publishable_QPLaxQw-b5CYZSizS_7P4Q_5uMemWVq";
+const STORAGE_BASE = `${SUPABASE_URL}/storage/v1/object/public/family-journal`;
 
-const EMOJI_MAP = {
-  Milestone: "🌟", Funny: "😂", Quote: "💬",
-  First: "🎉", Health: "💚", Memory: "📸", Other: "✨",
-};
-
-const AUTHOR_COLORS = {
-  Brandon: "#4a9eff", Jacky: "#e8836b", Mom: "#8b5cf6", Dad: "#10b981",
-};
-
+const EMOJI = { Milestone:"🌟", Funny:"😂", Quote:"💬", First:"🎉", Health:"💚", Memory:"📸", Other:"✨" };
+const AUTHOR_CLR = { Brandon:"#4a9eff", Jacky:"#e8836b", Mom:"#8b5cf6", Dad:"#10b981" };
 const KID_BG = {
   Gabby: "linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%)",
   Madalyn: "linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%)",
   Both: "linear-gradient(135deg, #fce4ec 0%, #c5cae9 100%)",
   Family: "linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%)",
 };
+const sans = "'Helvetica Neue', 'Arial', sans-serif";
 
 export default function App() {
   const [moments, setMoments] = useState([]);
@@ -67,27 +62,20 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#faf9f7", fontFamily: "'Georgia', 'Times New Roman', serif" }}>
-
       {/* Header */}
       <div style={{
         background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
         padding: "48px 24px 36px", color: "white", textAlign: "center",
       }}>
         <div style={label({ color: "#e8836b", marginBottom: "8px" })}>The Henes Family</div>
-        <h1 style={{ fontSize: "38px", fontWeight: "400", margin: "0 0 6px", letterSpacing: "1px" }}>
-          Memory Journal
-        </h1>
+        <h1 style={{ fontSize: "38px", fontWeight: "400", margin: "0 0 6px", letterSpacing: "1px" }}>Memory Journal</h1>
         <div style={{ fontSize: "14px", opacity: 0.5, fontFamily: sans }}>
           {stats.total} moment{stats.total !== 1 ? "s" : ""} captured
           {stats.withMedia > 0 && ` · ${stats.withMedia} with media`}
         </div>
         <div style={{ display: "flex", justifyContent: "center", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
-          {Object.entries(stats.byKid).map(([kid, n]) => (
-            <Pill key={kid} text={`${kid}: ${n}`} />
-          ))}
-          {Object.entries(stats.byAuthor).map(([author, n]) => (
-            <Pill key={author} text={`${author}: ${n}`} color={AUTHOR_COLORS[author]} dim />
-          ))}
+          {Object.entries(stats.byKid).map(([kid, n]) => <Pill key={kid} text={`${kid}: ${n}`} />)}
+          {Object.entries(stats.byAuthor).map(([a, n]) => <Pill key={a} text={`${a}: ${n}`} color={AUTHOR_CLR[a]} dim />)}
         </div>
       </div>
 
@@ -100,7 +88,7 @@ export default function App() {
         {kids.map((k) => <Filter key={k} active={kidFilter === k} onClick={() => setKidFilter(k)} text={k} />)}
         <div style={{ width: "1px", background: "#ddd", margin: "0 4px", flexShrink: 0 }} />
         <Filter active={typeFilter === "all"} onClick={() => setTypeFilter("all")} text="All Types" />
-        {types.map((t) => <Filter key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)} text={`${EMOJI_MAP[t] || ""} ${t}`} />)}
+        {types.map((t) => <Filter key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)} text={`${EMOJI[t] || ""} ${t}`} />)}
       </div>
 
       {/* Content */}
@@ -112,10 +100,7 @@ export default function App() {
         ) : (
           Object.entries(grouped).map(([date, items]) => (
             <div key={date} style={{ marginBottom: "36px" }}>
-              <div style={{
-                ...label({ color: "#999" }),
-                marginBottom: "16px", paddingBottom: "8px", borderBottom: "1px solid #eee",
-              }}>
+              <div style={{ ...label({ color: "#999" }), marginBottom: "16px", paddingBottom: "8px", borderBottom: "1px solid #eee" }}>
                 {date}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -133,33 +118,71 @@ export default function App() {
   );
 }
 
-/* ---- Sub-components ---- */
-
 function Card({ m }) {
   const time = new Date(m.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const mediaUrl = m.primary_media_path ? `${STORAGE_BASE}/${m.primary_media_path}` : null;
+
+  const isVideo = m.primary_media_path && (m.primary_media_path.endsWith(".mp4") || m.primary_media_path.endsWith(".mov"));
+  const isAudio = m.primary_media_path && (m.primary_media_path.endsWith(".ogg") || m.primary_media_path.endsWith(".mp3") || m.primary_media_path.endsWith(".oga"));
+  const isImage = m.primary_media_path && (m.primary_media_path.endsWith(".jpg") || m.primary_media_path.endsWith(".jpeg") || m.primary_media_path.endsWith(".png") || m.primary_media_path.endsWith(".webp"));
+
   return (
     <div style={{
       background: KID_BG[m.kid] || "white", borderRadius: "16px", padding: "20px",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden",
     }}>
+      {/* Top row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "22px" }}>{EMOJI_MAP[m.type] || "✨"}</span>
+          <span style={{ fontSize: "22px" }}>{EMOJI[m.type] || "✨"}</span>
           <span style={{ ...label({ color: "#1a1a2e", opacity: 0.55 }) }}>{m.kid} · {m.type}</span>
         </div>
         <span style={{ fontSize: "11px", fontFamily: sans, color: "#999" }}>{time}</span>
       </div>
+
+      {/* Text */}
       <div style={{ fontSize: "17px", lineHeight: 1.6, color: "#1a1a2e", marginBottom: "14px" }}>
         "{m.text}"
       </div>
+
+      {/* Media */}
+      {isVideo && mediaUrl && (
+        <div style={{ marginBottom: "14px", borderRadius: "12px", overflow: "hidden" }}>
+          <video
+            controls
+            playsInline
+            preload="metadata"
+            style={{ width: "100%", borderRadius: "12px", maxHeight: "400px", background: "#000" }}
+          >
+            <source src={mediaUrl} type="video/mp4" />
+          </video>
+        </div>
+      )}
+
+      {isImage && mediaUrl && (
+        <div style={{ marginBottom: "14px", borderRadius: "12px", overflow: "hidden" }}>
+          <img
+            src={mediaUrl}
+            alt={m.text}
+            style={{ width: "100%", borderRadius: "12px", maxHeight: "400px", objectFit: "cover" }}
+          />
+        </div>
+      )}
+
+      {isAudio && mediaUrl && (
+        <div style={{ marginBottom: "14px" }}>
+          <audio controls preload="metadata" style={{ width: "100%", height: "40px" }}>
+            <source src={mediaUrl} type={m.primary_media_path.endsWith(".ogg") ? "audio/ogg" : "audio/mpeg"} />
+          </audio>
+        </div>
+      )}
+
+      {/* Bottom row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-        <span style={{ fontSize: "12px", fontFamily: sans, fontWeight: 600, color: AUTHOR_COLORS[m.author] || "#666" }}>
+        <span style={{ fontSize: "12px", fontFamily: sans, fontWeight: 600, color: AUTHOR_CLR[m.author] || "#666" }}>
           {m.author}
         </span>
         <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-          {m.primary_media_path && (
-            <Tag text={m.primary_media_path.endsWith(".ogg") ? "🎙 voice" : m.primary_media_path.includes("video") ? "🎬 video" : "📷 photo"} />
-          )}
           {Array.isArray(m.tags) && m.tags.slice(0, 3).map((t, i) => <Tag key={i} text={t} />)}
         </div>
       </div>
@@ -202,8 +225,6 @@ function Empty({ text }) {
   return <div style={{ textAlign: "center", padding: "60px 0", color: "#999", fontFamily: sans }}>{text}</div>;
 }
 
-/* ---- Helpers ---- */
-const sans = "'Helvetica Neue', 'Arial', sans-serif";
 function label(overrides = {}) {
   return { fontSize: "12px", letterSpacing: "3px", textTransform: "uppercase", fontFamily: sans, fontWeight: 600, ...overrides };
 }
