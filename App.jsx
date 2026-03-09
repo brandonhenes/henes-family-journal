@@ -427,7 +427,7 @@ function Card({ m, faved, onFav, reactions, onReact }) {
         </div>
       </div>
       <div style={{ fontSize:m.type==="Quote"?"20px":"17px",lineHeight:1.6,color:"#1a1a2e",marginBottom:"14px",fontStyle:m.type==="Quote"?"italic":"normal",position:"relative",zIndex:3 }}>
-        {m.type==="Quote"?<span style={{fontFamily:"'Georgia',serif"}}>❝ {m.text} ❞</span>:`"${m.text}"`}
+        {m.text.startsWith("[")&&m.text.endsWith("]")?null:m.type==="Quote"?<span style={{fontFamily:"'Georgia',serif"}}>❝ {m.text} ❞</span>:`"${m.text}"`}
       </div>
       {isV&&url&&<div style={{marginBottom:"14px",borderRadius:"12px",overflow:"hidden"}}><video controls playsInline preload="metadata" style={{width:"100%",borderRadius:"12px",maxHeight:"400px",background:"#000"}}><source src={url} type="video/mp4"/></video></div>}
       {isI&&url&&<div style={{marginBottom:"14px",borderRadius:"12px",overflow:"hidden"}}><img src={url} alt={m.text} style={{width:"100%",borderRadius:"12px",maxHeight:"400px",objectFit:"cover"}}/></div>}
