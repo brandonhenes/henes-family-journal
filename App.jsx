@@ -13,125 +13,81 @@ const KID_WASH = {
   Both:{bg:"linear-gradient(135deg,#fff5f7 0%,#f0ecff 100%)",border:"#e8d8ee"},
   Family:{bg:"linear-gradient(135deg,#fffcf0 0%,#fff5e0 30%,#fffaf0 100%)",border:"#f0e4c8"},
 };
+const BIRTHDAYS={Gabby:new Date("2024-07-15"),Madelyn:new Date("2026-07-01")};
 const S = "'Source Sans 3',sans-serif";
 const sbH = {apikey:KEY,Authorization:`Bearer ${KEY}`,"Content-Type":"application/json"};
 const sbPost=(p,b)=>fetch(`${SB}/rest/v1/${p}`,{method:"POST",headers:{...sbH,Prefer:"return=representation"},body:JSON.stringify(b)});
 const sbDel=p=>fetch(`${SB}/rest/v1/${p}`,{method:"DELETE",headers:sbH});
+const sbPatch=(p,b)=>fetch(`${SB}/rest/v1/${p}`,{method:"PATCH",headers:{...sbH,Prefer:"return=representation"},body:JSON.stringify(b)});
 const gN=()=>{try{return sessionStorage.getItem("jN")||null}catch{return null}};
 const sN=n=>{try{sessionStorage.setItem("jN",n)}catch{}};
+
+/* ---- Helpers ---- */
+const ageAt=(kid,date)=>{const b=BIRTHDAYS[kid];if(!b)return null;const d=new Date(date);const mo=((d.getFullYear()-b.getFullYear())*12)+(d.getMonth()-b.getMonth());if(mo<0)return null;if(mo<24)return `${mo}mo`;return `${Math.floor(mo/12)}y ${mo%12}mo`};
+
+// Group moments within 3min of each other from same author into clusters
+const clusterMoments=(items)=>{if(!items.length)return[];const clusters=[];let cur={primary:items[0],extra:[]};
+  for(let i=1;i<items.length;i++){const m=items[i];const prev=cur.extra.length?cur.extra[cur.extra.length-1]:cur.primary;const gap=Math.abs(new Date(prev.created_at)-new Date(m.created_at));const sameAuthor=m.author===cur.primary.author;
+    if(sameAuthor&&gap<180000&&(m.primary_media_path||cur.primary.primary_media_path)){cur.extra.push(m)}else{clusters.push(cur);cur={primary:m,extra:[]}}}
+  clusters.push(cur);return clusters};
 
 /* ---- Toast system ---- */
 let toastId=0;
 function useToast(){
   const[toasts,setToasts]=useState([]);
-  const show=useCallback((msg,emoji="")=>{
-    const id=++toastId;
-    setToasts(t=>[...t,{id,msg,emoji}]);
-    setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),2200);
-  },[]);
+  const show=useCallback((msg,emoji="")=>{const id=++toastId;setToasts(t=>[...t,{id,msg,emoji}]);setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),2200)},[]);
   return{toasts,show};
 }
-
 function ToastContainer({toasts}){
-  return(
-    <div style={{position:"fixed",bottom:"24px",left:"50%",transform:"translateX(-50%)",zIndex:2000,display:"flex",flexDirection:"column-reverse",gap:"8px",pointerEvents:"none"}}>
-      {toasts.map(t=>(
-        <div key={t.id} className="toast-in" style={{background:"#5c4a4f",color:"white",padding:"10px 20px",borderRadius:"24px",fontSize:"14px",fontFamily:S,fontWeight:600,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:"8px",whiteSpace:"nowrap",backdropFilter:"blur(8px)"}}>
-          {t.emoji&&<span style={{fontSize:"16px"}}>{t.emoji}</span>}
-          {t.msg}
-        </div>
-      ))}
-    </div>
-  );
+  return(<div style={{position:"fixed",bottom:"24px",left:"50%",transform:"translateX(-50%)",zIndex:2000,display:"flex",flexDirection:"column-reverse",gap:"8px",pointerEvents:"none"}}>
+    {toasts.map(t=>(<div key={t.id} className="toast-in" style={{background:"#5c4a4f",color:"white",padding:"10px 20px",borderRadius:"24px",fontSize:"14px",fontFamily:S,fontWeight:600,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:"8px",whiteSpace:"nowrap",backdropFilter:"blur(8px)"}}>{t.emoji&&<span style={{fontSize:"16px"}}>{t.emoji}</span>}{t.msg}</div>))}
+  </div>);
 }
 
 /* ---- Progressive image (blur-up) ---- */
 function ProgressiveImage({src,alt="",style={},className="",onClick}){
-  const[loaded,setLoaded]=useState(false);
-  const[err,setErr]=useState(false);
-  return(
-    <div style={{position:"relative",overflow:"hidden",borderRadius:style.borderRadius||"18px"}} className={className} onClick={onClick}>
-      <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,#f5eff0 0%,#ede5e8 50%,#f0e8ec 100%)",transition:"opacity 0.4s ease",opacity:loaded?0:1,zIndex:1}}>
-        <div className="shimmer-overlay" style={{position:"absolute",inset:0}}/>
-      </div>
-      {!err?<img src={src} alt={alt} onLoad={()=>setLoaded(true)} onError={()=>setErr(true)} style={{...style,opacity:loaded?1:0,transition:"opacity 0.4s ease"}}/>
-      :<div style={{...style,display:"flex",alignItems:"center",justifyContent:"center",background:"#f5eff0",color:"#d0bfc3",fontSize:"13px",fontFamily:S,fontWeight:600,minHeight:"120px"}}>📷 Couldn't load</div>}
-    </div>
-  );
+  const[loaded,setLoaded]=useState(false);const[err,setErr]=useState(false);
+  return(<div style={{position:"relative",overflow:"hidden",borderRadius:style.borderRadius||"18px"}} className={className} onClick={onClick}>
+    <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,#f5eff0 0%,#ede5e8 50%,#f0e8ec 100%)",transition:"opacity 0.4s ease",opacity:loaded?0:1,zIndex:1}}><div className="shimmer-overlay" style={{position:"absolute",inset:0}}/></div>
+    {!err?<img src={src} alt={alt} onLoad={()=>setLoaded(true)} onError={()=>setErr(true)} style={{...style,opacity:loaded?1:0,transition:"opacity 0.4s ease"}}/>
+    :<div style={{...style,display:"flex",alignItems:"center",justifyContent:"center",background:"#f5eff0",color:"#d0bfc3",fontSize:"13px",fontFamily:S,fontWeight:600,minHeight:"120px"}}>📷 Couldn't load</div>}
+  </div>);
 }
 
 /* ---- Skeleton loading ---- */
-function SkeletonCard({delay=0}){
-  const wash=["#fff5f7","#f5f3ff","#fffcf0"][Math.floor(Math.random()*3)];
-  return(
-    <div className="bloom" style={{animationDelay:`${delay}s`,borderRadius:"24px",padding:"24px",background:wash,border:"1.5px solid #f0e8e4",overflow:"hidden",position:"relative"}}>
-      <div className="shimmer-overlay" style={{position:"absolute",inset:0,zIndex:1}}/>
-      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"16px"}}>
-        <div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#ede5dc"}}/>
-        <div style={{width:"80px",height:"12px",borderRadius:"6px",background:"#ede5dc"}}/>
-        <div style={{marginLeft:"auto",width:"40px",height:"10px",borderRadius:"5px",background:"#ede5dc"}}/>
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"16px"}}>
-        <div style={{width:"100%",height:"14px",borderRadius:"7px",background:"#ede5dc"}}/>
-        <div style={{width:"85%",height:"14px",borderRadius:"7px",background:"#ede5dc"}}/>
-        <div style={{width:"60%",height:"14px",borderRadius:"7px",background:"#ede5dc"}}/>
-      </div>
-      <div style={{width:"140px",height:"100px",borderRadius:"14px",background:"#ede5dc",marginBottom:"14px"}}/>
-      <div style={{display:"flex",gap:"8px"}}>
-        <div style={{width:"50px",height:"10px",borderRadius:"5px",background:"#ede5dc"}}/>
-        <div style={{width:"40px",height:"18px",borderRadius:"9px",background:"#ede5dc"}}/>
-        <div style={{width:"40px",height:"18px",borderRadius:"9px",background:"#ede5dc"}}/>
-      </div>
-    </div>
-  );
-}
-
-function SkeletonTimeline(){
-  return(
-    <div style={{position:"relative",paddingLeft:"32px"}}>
-      <div style={{position:"absolute",left:"11px",top:0,bottom:0,width:"2px",background:"linear-gradient(to bottom,#ede5dc,#f0e8e4)",borderRadius:"1px"}}/>
-      <div style={{display:"flex",alignItems:"center",marginBottom:"18px",marginLeft:"-32px"}}>
-        <div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#ede5dc",border:"3px solid #faf8f5",flexShrink:0,zIndex:1}}/>
-        <div style={{width:"180px",height:"12px",borderRadius:"6px",background:"#ede5dc",marginLeft:"14px"}}/>
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-        {[0,1,2].map(i=><div key={i} style={{position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#ede5dc",border:"2.5px solid #faf8f5",zIndex:1}}/><SkeletonCard delay={i*0.12}/></div>)}
-      </div>
-    </div>
-  );
-}
+function SkeletonCard({delay=0}){const wash=["#fff5f7","#f5f3ff","#fffcf0"][Math.floor(Math.random()*3)];return(
+  <div className="bloom" style={{animationDelay:`${delay}s`,borderRadius:"24px",padding:"24px",background:wash,border:"1.5px solid #f0e8e4",overflow:"hidden",position:"relative"}}>
+    <div className="shimmer-overlay" style={{position:"absolute",inset:0,zIndex:1}}/>
+    <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"16px"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#ede5dc"}}/><div style={{width:"80px",height:"12px",borderRadius:"6px",background:"#ede5dc"}}/><div style={{marginLeft:"auto",width:"40px",height:"10px",borderRadius:"5px",background:"#ede5dc"}}/></div>
+    <div style={{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"16px"}}><div style={{width:"100%",height:"14px",borderRadius:"7px",background:"#ede5dc"}}/><div style={{width:"85%",height:"14px",borderRadius:"7px",background:"#ede5dc"}}/><div style={{width:"60%",height:"14px",borderRadius:"7px",background:"#ede5dc"}}/></div>
+    <div style={{width:"140px",height:"100px",borderRadius:"14px",background:"#ede5dc",marginBottom:"14px"}}/><div style={{display:"flex",gap:"8px"}}><div style={{width:"50px",height:"10px",borderRadius:"5px",background:"#ede5dc"}}/><div style={{width:"40px",height:"18px",borderRadius:"9px",background:"#ede5dc"}}/></div>
+  </div>);}
+function SkeletonTimeline(){return(
+  <div style={{position:"relative",paddingLeft:"32px"}}><div style={{position:"absolute",left:"11px",top:0,bottom:0,width:"2px",background:"linear-gradient(to bottom,#ede5dc,#f0e8e4)",borderRadius:"1px"}}/>
+    <div style={{display:"flex",alignItems:"center",marginBottom:"18px",marginLeft:"-32px"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#ede5dc",border:"3px solid #faf8f5",flexShrink:0,zIndex:1}}/><div style={{width:"180px",height:"12px",borderRadius:"6px",background:"#ede5dc",marginLeft:"14px"}}/></div>
+    <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{[0,1,2].map(i=><div key={i} style={{position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#ede5dc",border:"2.5px solid #faf8f5",zIndex:1}}/><SkeletonCard delay={i*0.12}/></div>)}</div>
+  </div>);}
 
 /* ---- Reactions ---- */
 function Reactions({mid,rx,onR,toast}){
-  const[showEmojis,setShowEmojis]=useState(false);
-  const[showNames,setShowNames]=useState(false);
-  const[pendingEmoji,setPending]=useState(null);
-  const[pop,setPop]=useState(false);
+  const[showEmojis,setShowEmojis]=useState(false);const[showNames,setShowNames]=useState(false);const[pendingEmoji,setPending]=useState(null);const[pop,setPop]=useState(false);
   const pressTimer=useRef(null);const ref=useRef(null);
-
   useEffect(()=>{const h=e=>{if(ref.current&&!ref.current.contains(e.target)){setShowEmojis(false);setShowNames(false)}};document.addEventListener("mousedown",h);document.addEventListener("touchstart",h);return()=>{document.removeEventListener("mousedown",h);document.removeEventListener("touchstart",h)}},[]);
-
   const g={};(rx||[]).forEach(r=>{if(!g[r.emoji])g[r.emoji]={c:0,a:[],my:false};g[r.emoji].c++;g[r.emoji].a.push(r.author);if(r.author===gN())g[r.emoji].my=true});
-
   const doReact=async(emoji,author)=>{setShowEmojis(false);setShowNames(false);setPending(null);const ex=(rx||[]).find(r=>r.emoji===emoji&&r.author===author);if(ex){await sbDel(`reactions?id=eq.${ex.id}`);toast("Removed","👋")}else{await sbPost("reactions",{moment_id:mid,author,emoji});toast("Reacted!",emoji)}onR()};
   const startReact=emoji=>{const name=gN();if(name){doReact(emoji,name)}else{setPending(emoji);setShowNames(true);setShowEmojis(false)}};
   const pickName=name=>{sN(name);toast(`Hi ${name}!`,"👋");if(pendingEmoji)doReact(pendingEmoji,name);setShowNames(false)};
-
   const dn=()=>{pressTimer.current=setTimeout(()=>{setShowEmojis(true);pressTimer.current=null},2000)};
   const up=()=>{if(pressTimer.current){clearTimeout(pressTimer.current);pressTimer.current=null;setPop(true);setTimeout(()=>setPop(false),350);startReact("❤️")}};
   const lv=()=>{if(pressTimer.current){clearTimeout(pressTimer.current);pressTimer.current=null}};
-
   const h=g["❤️"];const my=h?.my;const oth=Object.entries(g).filter(([e])=>e!=="❤️");
-  return(
-    <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"12px",flexWrap:"wrap"}} ref={ref}>
-      <div style={{position:"relative"}}>
-        <button className={`heart-btn ${pop?"heart-pop":""}`} onMouseDown={dn} onMouseUp={up} onMouseLeave={lv} onTouchStart={dn} onTouchEnd={up} style={{opacity:my?1:0.3}}>{my?"❤️":"🤍"}{h&&h.c>0&&<span style={{position:"relative",top:"-2px",fontSize:"10px",fontFamily:S,fontWeight:800,color:"#c97b8b",marginLeft:"2px"}}>{h.c}</span>}</button>
-        {showEmojis&&<div className="popup-f">{RX_EMOJIS.map(e=><button key={e} className="emoji-opt-f" onClick={()=>startReact(e)}>{e}</button>)}</div>}
-        {showNames&&<div className="popup-f" style={{flexDirection:"column",gap:0,padding:"6px 4px",minWidth:"120px"}}><div style={{fontSize:"10px",fontFamily:S,fontWeight:700,color:"#c4a8ae",letterSpacing:"1px",textTransform:"uppercase",padding:"4px 10px 6px",textAlign:"center"}}>Who's this?</div>{FAMILY_NAMES.map(n=><button key={n} className="name-opt" onClick={()=>pickName(n)} style={{color:A_CLR[n]||"#6b5560"}}>{n}</button>)}</div>}
-      </div>
-      {oth.map(([emoji,data])=><button key={emoji} onClick={()=>startReact(emoji)} title={data.a.join(", ")} style={{display:"flex",alignItems:"center",gap:"3px",padding:"4px 12px",borderRadius:"18px",border:data.my?"2px solid #c97b8b":"1.5px solid #ede5dc",background:data.my?"#fff5f7":"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:"15px",transition:"all 0.15s",fontFamily:S}}><span>{emoji}</span><span style={{fontSize:"11px",fontWeight:700,color:data.my?"#c97b8b":"#b8a0a5"}}>{data.c}</span></button>)}
+  return(<div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"12px",flexWrap:"wrap"}} ref={ref}>
+    <div style={{position:"relative"}}><button className={`heart-btn ${pop?"heart-pop":""}`} onMouseDown={dn} onMouseUp={up} onMouseLeave={lv} onTouchStart={dn} onTouchEnd={up} style={{opacity:my?1:0.3}}>{my?"❤️":"🤍"}{h&&h.c>0&&<span style={{position:"relative",top:"-2px",fontSize:"10px",fontFamily:S,fontWeight:800,color:"#c97b8b",marginLeft:"2px"}}>{h.c}</span>}</button>
+      {showEmojis&&<div className="popup-f">{RX_EMOJIS.map(e=><button key={e} className="emoji-opt-f" onClick={()=>startReact(e)}>{e}</button>)}</div>}
+      {showNames&&<div className="popup-f" style={{flexDirection:"column",gap:0,padding:"6px 4px",minWidth:"120px"}}><div style={{fontSize:"10px",fontFamily:S,fontWeight:700,color:"#c4a8ae",letterSpacing:"1px",textTransform:"uppercase",padding:"4px 10px 6px",textAlign:"center"}}>Who's this?</div>{FAMILY_NAMES.map(n=><button key={n} className="name-opt" onClick={()=>pickName(n)} style={{color:A_CLR[n]||"#6b5560"}}>{n}</button>)}</div>}
     </div>
-  );
+    {oth.map(([emoji,data])=><button key={emoji} onClick={()=>startReact(emoji)} title={data.a.join(", ")} style={{display:"flex",alignItems:"center",gap:"3px",padding:"4px 12px",borderRadius:"18px",border:data.my?"2px solid #c97b8b":"1.5px solid #ede5dc",background:data.my?"#fff5f7":"rgba(255,255,255,0.7)",cursor:"pointer",fontSize:"15px",transition:"all 0.15s",fontFamily:S}}><span>{emoji}</span><span style={{fontSize:"11px",fontWeight:700,color:data.my?"#c97b8b":"#b8a0a5"}}>{data.c}</span></button>)}
+  </div>);
 }
 
 function ShareBtn({m,toast}){const[cp,setCp]=useState(false);const share=async()=>{const e=EMOJI[m.type]||"✨";const d=new Date(m.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});const txt=`${e} ${m.kid}: "${m.text}" - ${m.author}, ${d}`;const u="https://henes-family-journal.vercel.app";if(navigator.share){try{await navigator.share({text:txt,url:u});toast("Shared!","↗");return}catch{}}try{await navigator.clipboard.writeText(`${txt}\n${u}`);setCp(true);toast("Copied to clipboard","📋");setTimeout(()=>setCp(false),2000)}catch{}};return(<button onClick={share} title="Share" style={{background:"none",border:"none",cursor:"pointer",fontSize:"14px",padding:"4px",opacity:0.3,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.7"} onMouseLeave={e=>e.target.style.opacity="0.3"}>{cp?"✅":"↗"}</button>);}
@@ -144,165 +100,107 @@ function CalendarHeatmap({moments}){const today=new Date();const days=91;const c
 
 function GalleryView({moments,onImageClick}){const wm=moments.filter(m=>m.primary_media_path&&(m.primary_media_path.endsWith(".jpg")||m.primary_media_path.endsWith(".jpeg")||m.primary_media_path.endsWith(".png")||m.primary_media_path.endsWith(".mp4")));if(!wm.length)return<EmptyState type="gallery"/>;return(<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px",padding:"16px 0"}}>{wm.map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path.endsWith(".mp4");return(<div key={m.id} className="gallery-item-f" onClick={()=>onImageClick({url:u,isVideo:isV,moment:m})}>{isV?(<VideoThumbnail src={u} style={{width:"100%",height:"100%"}}/>):(<ProgressiveImage src={u} style={{width:"100%",height:"100%",objectFit:"cover"}} />)}</div>)})}</div>);}
 
-function EmptyState({type}){
-  const configs={
-    empty:{icon:"📖",title:"No moments yet",sub:"Send a photo or message to the Telegram bot to get started!",accent:"#c97b8b"},
-    search:{icon:"🔍",title:"No memories match",sub:"Try a different search term",accent:"#b8a0d0"},
-    ai:{icon:"🤖",title:"No matches found",sub:"Try asking differently, like 'when did Gabby first walk?'",accent:"#c97b8b"},
-    fav:{icon:"⭐",title:"No favorites yet",sub:"Tap the star on any memory to save it here",accent:"#d4a030"},
-    gallery:{icon:"📷",title:"No photos or videos yet",sub:"Send a photo to the bot and it'll show up here",accent:"#c97b8b"},
-  };
-  const c=configs[type]||configs.empty;
-  return(
-    <div style={{textAlign:"center",padding:"60px 20px"}} className="view-crossfade">
-      <div className="empty-icon" style={{fontSize:"48px",marginBottom:"16px",display:"inline-block"}}>{c.icon}</div>
-      <div className="empty-float" style={{display:"inline-block",marginBottom:"20px"}}>
-        <svg width="120" height="80" viewBox="0 0 120 80" fill="none">
-          <rect x="10" y="20" width="40" height="50" rx="8" fill={c.accent} opacity="0.08" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.2"/>
-          <rect x="30" y="10" width="40" height="50" rx="8" fill={c.accent} opacity="0.12" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.25" transform="rotate(6 50 35)"/>
-          <rect x="50" y="18" width="40" height="50" rx="8" fill={c.accent} opacity="0.06" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.15" transform="rotate(-4 70 43)"/>
-          <circle cx="50" cy="35" r="8" fill={c.accent} opacity="0.15"/>
-          <path d="M20 55 L30 42 L40 48 L55 30 L70 50" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </div>
-      <div style={{fontSize:"18px",fontWeight:700,color:"#5c4a4f",fontFamily:S,marginBottom:"8px"}}>{c.title}</div>
-      <div style={{fontSize:"14px",color:"#c4a8ae",fontFamily:S,fontWeight:500,maxWidth:"280px",margin:"0 auto",lineHeight:1.5}}>{c.sub}</div>
-    </div>
-  );
+/* ---- #3 Milestones timeline ---- */
+function MilestonesView({moments}){
+  const ms=moments.filter(m=>m.type==="Milestone"||m.type==="First").sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+  if(!ms.length)return<EmptyState type="empty"/>;
+  const kidColors={Gabby:"#c97b8b",Madelyn:"#9b7fc4",Both:"#d4a030",Family:"#6aab7b"};
+  return(<div className="view-crossfade" style={{position:"relative",paddingLeft:"40px"}}>
+    <div style={{position:"absolute",left:"18px",top:0,bottom:0,width:"3px",background:"linear-gradient(to bottom,#c97b8b,#ddd4f0,#f0e4c8)",borderRadius:"2px"}}/>
+    {ms.map((m,i)=>{const age=ageAt(m.kid,m.created_at);const clr=kidColors[m.kid]||"#c97b8b";const d=new Date(m.created_at);
+      return(<div key={m.id} className="bloom" style={{animationDelay:`${i*0.06}s`,marginBottom:"28px",position:"relative"}}>
+        <div style={{position:"absolute",left:"-34px",top:"8px",width:"28px",height:"28px",borderRadius:"50%",background:clr,border:"3px solid #faf8f5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px",zIndex:2,boxShadow:`0 2px 8px ${clr}40`}}>{m.type==="First"?"🎉":"🌟"}</div>
+        <div style={{background:"white",borderRadius:"20px",padding:"20px 22px",border:`2px solid ${clr}20`,boxShadow:`0 2px 12px ${clr}10`}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"8px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"12px",fontFamily:S,fontWeight:700,color:clr,textTransform:"uppercase",letterSpacing:"1px"}}>{m.kid}</span>{age&&<span style={{fontSize:"11px",fontFamily:S,fontWeight:600,color:"#c4a8ae",background:"#f5eff0",borderRadius:"10px",padding:"2px 8px"}}>{age}</span>}</div>
+            <span style={{fontSize:"11px",fontFamily:S,fontWeight:600,color:"#d0bfc3"}}>{d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
+          </div>
+          <div style={{fontSize:"18px",lineHeight:1.5,color:"#4a3a3f",fontWeight:500}}>{m.text}</div>
+          <div style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:A_CLR[m.author]||"#888",marginTop:"8px"}}>{m.author}</div>
+        </div>
+      </div>);})}
+  </div>);
 }
 
+function EmptyState({type}){
+  const configs={empty:{icon:"📖",title:"No moments yet",sub:"Send a photo or message to the Telegram bot to get started!",accent:"#c97b8b"},search:{icon:"🔍",title:"No memories match",sub:"Try a different search term",accent:"#b8a0d0"},ai:{icon:"🤖",title:"No matches found",sub:"Try asking differently, like 'when did Gabby first walk?'",accent:"#c97b8b"},fav:{icon:"⭐",title:"No favorites yet",sub:"Tap the star on any memory to save it here",accent:"#d4a030"},gallery:{icon:"📷",title:"No photos or videos yet",sub:"Send a photo to the bot and it'll show up here",accent:"#c97b8b"}};
+  const c=configs[type]||configs.empty;
+  return(<div style={{textAlign:"center",padding:"60px 20px"}} className="view-crossfade">
+    <div className="empty-icon" style={{fontSize:"48px",marginBottom:"16px",display:"inline-block"}}>{c.icon}</div>
+    <div className="empty-float" style={{display:"inline-block",marginBottom:"20px"}}><svg width="120" height="80" viewBox="0 0 120 80" fill="none"><rect x="10" y="20" width="40" height="50" rx="8" fill={c.accent} opacity="0.08" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.2"/><rect x="30" y="10" width="40" height="50" rx="8" fill={c.accent} opacity="0.12" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.25" transform="rotate(6 50 35)"/><rect x="50" y="18" width="40" height="50" rx="8" fill={c.accent} opacity="0.06" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.15" transform="rotate(-4 70 43)"/><circle cx="50" cy="35" r="8" fill={c.accent} opacity="0.15"/><path d="M20 55 L30 42 L40 48 L55 30 L70 50" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+    <div style={{fontSize:"18px",fontWeight:700,color:"#5c4a4f",fontFamily:S,marginBottom:"8px"}}>{c.title}</div>
+    <div style={{fontSize:"14px",color:"#c4a8ae",fontFamily:S,fontWeight:500,maxWidth:"280px",margin:"0 auto",lineHeight:1.5}}>{c.sub}</div>
+  </div>);
+}
+
+/* ---- Lightbox with pinch-zoom, swipe nav, audio support ---- */
 function Lightbox({data,onClose,mediaList,onNavigate}){
-  const touchStart=useRef(null);
-  const idx=mediaList?mediaList.findIndex(x=>x.url===data.url):-1;
+  const touchStart=useRef(null);const idx=mediaList?mediaList.findIndex(x=>x.url===data.url):-1;
   const hasPrev=idx>0;const hasNext=idx<mediaList.length-1;
   const goPrev=()=>{if(hasPrev){setZoom(1);setPan({x:0,y:0});onNavigate(mediaList[idx-1])}};
   const goNext=()=>{if(hasNext){setZoom(1);setPan({x:0,y:0});onNavigate(mediaList[idx+1])}};
-
-  // Zoom state
-  const[zoom,setZoom]=useState(1);
-  const[pan,setPan]=useState({x:0,y:0});
-  const pinchStart=useRef(null);
-  const zoomStart=useRef(1);
-  const panStart=useRef({x:0,y:0});
-  const dragging=useRef(false);
-  const dragOrigin=useRef({x:0,y:0});
-  const imgRef=useRef(null);
-
-  // Reset zoom on image change
+  const[zoom,setZoom]=useState(1);const[pan,setPan]=useState({x:0,y:0});
+  const pinchStart=useRef(null);const zoomStart=useRef(1);const panStart=useRef({x:0,y:0});const dragging=useRef(false);const dragOrigin=useRef({x:0,y:0});const imgRef=useRef(null);
   useEffect(()=>{setZoom(1);setPan({x:0,y:0})},[data.url]);
-
-  useEffect(()=>{
-    const h=e=>{if(e.key==="Escape")onClose();if(e.key==="ArrowLeft")goPrev();if(e.key==="ArrowRight")goNext()};
-    window.addEventListener("keydown",h);
-    document.body.style.overflow="hidden";
-    return()=>{window.removeEventListener("keydown",h);document.body.style.overflow=""};
-  },[onClose,idx]);
-
-  // Scroll wheel zoom (desktop)
-  const onWheel=e=>{
-    e.stopPropagation();e.preventDefault();
-    setZoom(z=>{const next=z-(e.deltaY*0.002);return Math.min(5,Math.max(1,next))});
-  };
-
-  // Touch handlers: 1 finger = swipe nav, 2 fingers = pinch zoom + pan
+  useEffect(()=>{const h=e=>{if(e.key==="Escape")onClose();if(e.key==="ArrowLeft")goPrev();if(e.key==="ArrowRight")goNext()};window.addEventListener("keydown",h);document.body.style.overflow="hidden";return()=>{window.removeEventListener("keydown",h);document.body.style.overflow=""};},[onClose,idx]);
+  const onWheel=e=>{e.stopPropagation();e.preventDefault();setZoom(z=>Math.min(5,Math.max(1,z-(e.deltaY*0.002))))};
   const getDist=ts=>Math.hypot(ts[0].clientX-ts[1].clientX,ts[0].clientY-ts[1].clientY);
-  const getMid=ts=>({x:(ts[0].clientX+ts[1].clientX)/2,y:(ts[0].clientY+ts[1].clientY)/2});
-
-  const onTouchStart=e=>{
-    if(e.touches.length===2){
-      e.preventDefault();
-      pinchStart.current=getDist(e.touches);
-      zoomStart.current=zoom;
-      panStart.current={...pan};
-      dragging.current=false;
-      touchStart.current=null;
-    }else if(e.touches.length===1&&zoom<=1){
-      touchStart.current=e.touches[0].clientX;
-      pinchStart.current=null;
-    }else if(e.touches.length===1&&zoom>1){
-      // Pan when zoomed
-      dragging.current=true;
-      dragOrigin.current={x:e.touches[0].clientX-pan.x,y:e.touches[0].clientY-pan.y};
-      touchStart.current=null;
-      pinchStart.current=null;
-    }
-  };
-  const onTouchMove=e=>{
-    if(e.touches.length===2&&pinchStart.current!==null){
-      e.preventDefault();
-      const dist=getDist(e.touches);
-      const scale=dist/pinchStart.current;
-      const newZoom=Math.min(5,Math.max(1,zoomStart.current*scale));
-      setZoom(newZoom);
-      if(newZoom<=1)setPan({x:0,y:0});
-    }else if(e.touches.length===1&&dragging.current&&zoom>1){
-      e.preventDefault();
-      setPan({x:e.touches[0].clientX-dragOrigin.current.x,y:e.touches[0].clientY-dragOrigin.current.y});
-    }
-  };
-  const onTouchEnd=e=>{
-    if(pinchStart.current!==null){
-      pinchStart.current=null;
-      if(zoom<=1.05){setZoom(1);setPan({x:0,y:0})}
-      return;
-    }
-    if(dragging.current){dragging.current=false;return}
-    if(touchStart.current!==null&&e.changedTouches.length>0){
-      const diff=e.changedTouches[0].clientX-touchStart.current;
-      touchStart.current=null;
-      if(Math.abs(diff)>60){diff>0?goPrev():goNext()}
-    }
-  };
-
-  // Double tap to toggle zoom
-  const lastTap=useRef(0);
-  const onDoubleTap=e=>{
-    const now=Date.now();
-    if(now-lastTap.current<300){
-      e.stopPropagation();
-      if(zoom>1){setZoom(1);setPan({x:0,y:0})}else{setZoom(2.5)}
-    }
-    lastTap.current=now;
-  };
-
-  // Mouse drag when zoomed (desktop)
+  const onTouchStartL=e=>{if(e.touches.length===2){e.preventDefault();pinchStart.current=getDist(e.touches);zoomStart.current=zoom;touchStart.current=null}else if(e.touches.length===1&&zoom<=1){touchStart.current=e.touches[0].clientX;pinchStart.current=null}else if(e.touches.length===1&&zoom>1){dragging.current=true;dragOrigin.current={x:e.touches[0].clientX-pan.x,y:e.touches[0].clientY-pan.y};touchStart.current=null;pinchStart.current=null}};
+  const onTouchMoveL=e=>{if(e.touches.length===2&&pinchStart.current!==null){e.preventDefault();const dist=getDist(e.touches);const newZoom=Math.min(5,Math.max(1,zoomStart.current*(dist/pinchStart.current)));setZoom(newZoom);if(newZoom<=1)setPan({x:0,y:0})}else if(e.touches.length===1&&dragging.current&&zoom>1){e.preventDefault();setPan({x:e.touches[0].clientX-dragOrigin.current.x,y:e.touches[0].clientY-dragOrigin.current.y})}};
+  const onTouchEndL=e=>{if(pinchStart.current!==null){pinchStart.current=null;if(zoom<=1.05){setZoom(1);setPan({x:0,y:0})}return}if(dragging.current){dragging.current=false;return}if(touchStart.current!==null&&e.changedTouches.length>0){const diff=e.changedTouches[0].clientX-touchStart.current;touchStart.current=null;if(Math.abs(diff)>60){diff>0?goPrev():goNext()}}};
+  const lastTap=useRef(0);const onDoubleTap=e=>{const now=Date.now();if(now-lastTap.current<300){e.stopPropagation();if(zoom>1){setZoom(1);setPan({x:0,y:0})}else setZoom(2.5)}lastTap.current=now};
   const onMouseDown=e=>{if(zoom>1){dragging.current=true;dragOrigin.current={x:e.clientX-pan.x,y:e.clientY-pan.y};e.preventDefault()}};
-  const onMouseMove=e=>{if(dragging.current&&zoom>1){setPan({x:e.clientX-dragOrigin.current.x,y:e.clientY-dragOrigin.current.y})}};
+  const onMouseMove=e=>{if(dragging.current&&zoom>1)setPan({x:e.clientX-dragOrigin.current.x,y:e.clientY-dragOrigin.current.y})};
   const onMouseUp=()=>{dragging.current=false};
+  const handleBackdropClick=e=>{if(zoom>1){setZoom(1);setPan({x:0,y:0})}else onClose()};
 
-  const handleBackdropClick=e=>{if(zoom>1){setZoom(1);setPan({x:0,y:0})}else{onClose()}};
-
-  const{url,isVideo,moment:m}=data;
+  const{url,isVideo,isAudio,moment:m}=data;
   const navBtn={position:"absolute",top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:"28px",width:"48px",height:"48px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)",transition:"background 0.2s,opacity 0.2s",zIndex:1001,fontFamily:"sans-serif"};
   const counter=mediaList&&mediaList.length>1?`${idx+1} / ${mediaList.length}`:null;
   const isZoomed=zoom>1;
 
-  return(
-    <div className="lightbox-f" onClick={handleBackdropClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{touchAction:"none"}}>
-      <button onClick={e=>{e.stopPropagation();onClose()}} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s,opacity 0.2s",zIndex:1001,opacity:isZoomed?0.3:1}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"}>✕</button>
-      {hasPrev&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goPrev()}} style={{...navBtn,left:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>‹</button>}
-      {hasNext&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goNext()}} style={{...navBtn,right:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>›</button>}
-      <div key={url} style={{animation:"scaleIn 0.25s ease-out"}} onWheel={!isVideo?onWheel:undefined}>
-        {isVideo?(
-          <video controls autoPlay playsInline style={{maxWidth:"92vw",maxHeight:"70vh",borderRadius:"20px"}} onClick={e=>e.stopPropagation()}><source src={url} type="video/mp4"/></video>
-        ):(
-          <img ref={imgRef} src={url} alt="" onClick={e=>{e.stopPropagation();onDoubleTap(e)}} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} draggable={false} style={{maxWidth:"92vw",maxHeight:"75vh",objectFit:"contain",borderRadius:"12px",cursor:isZoomed?"grab":"zoom-in",transform:`scale(${zoom}) translate(${pan.x/zoom}px,${pan.y/zoom}px)`,transition:dragging.current?"none":"transform 0.15s ease-out",userSelect:"none",WebkitUserDrag:"none"}}/>
-        )}
-      </div>
-      {isZoomed&&<div style={{position:"absolute",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,0.5)",borderRadius:"16px",padding:"4px 14px",fontSize:"11px",fontFamily:S,fontWeight:700,color:"rgba(255,255,255,0.6)",backdropFilter:"blur(4px)",pointerEvents:"none"}}>{Math.round(zoom*100)}%</div>}
-      {!isZoomed&&<div onClick={e=>e.stopPropagation()} style={{color:"white",marginTop:"16px",textAlign:"center",maxWidth:"480px"}}>
-        {counter&&<div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)",fontFamily:S,fontWeight:700,marginBottom:"6px",letterSpacing:"1px"}}>{counter}</div>}
-        {m&&!(m.text.startsWith("[")&&m.text.endsWith("]"))&&(
-          <>
-            <div style={{fontSize:"20px",lineHeight:1.5,fontFamily:S}}>"{m.text}"</div>
-            <div style={{fontSize:"12px",color:"rgba(255,255,255,0.5)",marginTop:"8px",fontFamily:S,fontWeight:600}}>{m.author} · {new Date(m.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div>
-          </>
-        )}
-      </div>}
+  return(<div className="lightbox-f" onClick={handleBackdropClick} onTouchStart={onTouchStartL} onTouchMove={onTouchMoveL} onTouchEnd={onTouchEndL} style={{touchAction:"none"}}>
+    <button onClick={e=>{e.stopPropagation();onClose()}} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s,opacity 0.2s",zIndex:1001,opacity:isZoomed?0.3:1}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"}>✕</button>
+    {hasPrev&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goPrev()}} style={{...navBtn,left:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>‹</button>}
+    {hasNext&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goNext()}} style={{...navBtn,right:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>›</button>}
+    <div key={url} style={{animation:"scaleIn 0.25s ease-out"}} onWheel={!isVideo&&!isAudio?onWheel:undefined} onClick={e=>e.stopPropagation()}>
+      {isAudio?(
+        <div style={{background:"rgba(255,255,255,0.08)",borderRadius:"24px",padding:"32px 28px",minWidth:"320px",maxWidth:"400px",backdropFilter:"blur(12px)"}}>
+          <div style={{fontSize:"48px",textAlign:"center",marginBottom:"16px"}}>🎙</div>
+          <audio controls autoPlay src={url} style={{width:"100%",borderRadius:"12px",filter:"invert(1) hue-rotate(180deg)",opacity:0.9}} />
+        </div>
+      ):isVideo?(
+        <video controls autoPlay playsInline style={{maxWidth:"92vw",maxHeight:"70vh",borderRadius:"20px"}}><source src={url} type="video/mp4"/></video>
+      ):(
+        <img ref={imgRef} src={url} alt="" onClick={onDoubleTap} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} draggable={false} style={{maxWidth:"92vw",maxHeight:"75vh",objectFit:"contain",borderRadius:"12px",cursor:isZoomed?"grab":"zoom-in",transform:`scale(${zoom}) translate(${pan.x/zoom}px,${pan.y/zoom}px)`,transition:dragging.current?"none":"transform 0.15s ease-out",userSelect:"none",WebkitUserDrag:"none"}}/>
+      )}
     </div>
-  );
+    {isZoomed&&<div style={{position:"absolute",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,0.5)",borderRadius:"16px",padding:"4px 14px",fontSize:"11px",fontFamily:S,fontWeight:700,color:"rgba(255,255,255,0.6)",backdropFilter:"blur(4px)",pointerEvents:"none"}}>{Math.round(zoom*100)}%</div>}
+    {!isZoomed&&<div onClick={e=>e.stopPropagation()} style={{color:"white",marginTop:"16px",textAlign:"center",maxWidth:"480px"}}>
+      {counter&&<div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)",fontFamily:S,fontWeight:700,marginBottom:"6px",letterSpacing:"1px"}}>{counter}</div>}
+      {m&&!(m.text.startsWith("[")&&m.text.endsWith("]"))&&(<><div style={{fontSize:"20px",lineHeight:1.5,fontFamily:S}}>"{m.text}"</div><div style={{fontSize:"12px",color:"rgba(255,255,255,0.5)",marginTop:"8px",fontFamily:S,fontWeight:600}}>{m.author} · {new Date(m.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div></>)}
+    </div>}
+  </div>);
 }
 
+/* ---- #6 Media carousel for clustered moments ---- */
+function MediaCarousel({items,onImageClick}){
+  const[idx,setIdx]=useState(0);
+  const all=items.filter(m=>m.primary_media_path).map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");const isI=m.primary_media_path?.endsWith(".jpg")||m.primary_media_path?.endsWith(".jpeg")||m.primary_media_path?.endsWith(".png")||m.primary_media_path?.endsWith(".webp");return{url:u,isVideo:isV,isImage:isI,moment:m}});
+  if(!all.length)return null;
+  const cur=all[idx];
+  return(<div style={{marginBottom:"14px"}}>
+    <div className="clickable-media" onClick={()=>onImageClick({url:cur.url,isVideo:cur.isVideo,moment:cur.moment})} style={{borderRadius:"18px",overflow:"hidden",position:"relative"}}>
+      {cur.isVideo?<VideoThumbnail src={cur.url}/>:<ProgressiveImage src={cur.url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}}/>}
+      {all.length>1&&<div style={{position:"absolute",top:"10px",right:"10px",background:"rgba(0,0,0,0.5)",borderRadius:"12px",padding:"2px 10px",fontSize:"11px",fontFamily:S,fontWeight:700,color:"white",backdropFilter:"blur(4px)"}}>{idx+1}/{all.length}</div>}
+    </div>
+    {all.length>1&&<div style={{display:"flex",justifyContent:"center",gap:"6px",marginTop:"10px"}}>
+      {all.map((_,i)=><button key={i} onClick={()=>setIdx(i)} style={{width:i===idx?"20px":"8px",height:"8px",borderRadius:"4px",border:"none",background:i===idx?"#c97b8b":"#ede5dc",cursor:"pointer",transition:"all 0.2s",padding:0}}/>)}
+    </div>}
+  </div>);
+}
+
+/* ---- Main App ---- */
 export default function App(){
   const[moments,setM]=useState([]);const[reactions,setRx]=useState([]);const[loading,setL]=useState(true);
   const[typeF,setTF]=useState("all");const[kidF,setKF]=useState("all");
@@ -311,16 +209,9 @@ export default function App(){
   const[showFav,setSF]=useState(false);const[selMo,setSelMo]=useState("all");const sTimer=useRef(null);
   const[lightbox,setLightbox]=useState(null);
   const{toasts,show:toast}=useToast();
-  const[visibleCount,setVC]=useState(20);
-  const sentinelRef=useRef(null);
+  const[visibleCount,setVC]=useState(20);const sentinelRef=useRef(null);
 
-  // Infinite scroll: observe sentinel element
-  useEffect(()=>{
-    const el=sentinelRef.current;if(!el)return;
-    const obs=new IntersectionObserver(([e])=>{if(e.isIntersecting)setVC(v=>v+15)},{rootMargin:"200px"});
-    obs.observe(el);return()=>obs.disconnect();
-  },[loading,view]);
-  // Reset visible count when filters change
+  useEffect(()=>{const el=sentinelRef.current;if(!el)return;const obs=new IntersectionObserver(([e])=>{if(e.isIntersecting)setVC(v=>v+15)},{rootMargin:"200px"});obs.observe(el);return()=>obs.disconnect()},[loading,view]);
   useEffect(()=>{setVC(20)},[typeF,kidF,search,aiR,showFav,selMo,view]);
 
   const fetchM=()=>fetch(`${SB}/rest/v1/moments?order=created_at.desc&limit=500`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setM(d)}).catch(console.error);
@@ -329,6 +220,9 @@ export default function App(){
   const toggleFav=id=>{const n=favs.includes(id)?favs.filter(f=>f!==id):[...favs,id];setFavs(n);try{sessionStorage.setItem("faves",JSON.stringify(n))}catch{};const added=!favs.includes(id);toast(added?"Saved to favorites":"Removed from favorites",added?"⭐":"💫")};
   const doAi=useCallback(async q=>{if(!q.trim()){setAiR(null);return}setAiL(true);try{const r=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q,moments:moments.map(m=>({id:m.id,kid:m.kid,type:m.type,text:m.text,author:m.author,created_at:m.created_at}))})});const d=await r.json();setAiR(d.ids||[])}catch{setAiR(null)}setAiL(false)},[moments]);
   const handleSearch=v=>{setSe(v);if(aiMode){clearTimeout(sTimer.current);sTimer.current=setTimeout(()=>doAi(v),800)}};
+
+  // #5 Edit support
+  const updateMoment=async(id,text)=>{try{await sbPatch(`moments?id=eq.${id}`,{text});toast("Updated!","✏️");fetchM()}catch{toast("Couldn't save","❌")}};
 
   const filtered=moments.filter(m=>{if(typeF!=="all"&&m.type!==typeF)return false;if(kidF!=="all"&&m.kid!==kidF)return false;if(showFav&&!favs.includes(m.id))return false;if(selMo!=="all"&&new Date(m.created_at).toISOString().substring(0,7)!==selMo)return false;if(aiMode&&aiR)return aiR.includes(m.id);if(!aiMode&&search.trim()){const q=search.toLowerCase();if(!`${m.text} ${m.author} ${m.kid} ${m.type} ${(m.tags||[]).join(" ")}`.toLowerCase().includes(q))return false}return true});
 
@@ -340,7 +234,8 @@ export default function App(){
   const grouped=grp(filtered.slice(0,visibleCount));const fmtMo=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})};const getRx=id=>reactions.filter(r=>r.moment_id===id);
   const hasMore=visibleCount<filtered.length;
 
-  const mediaList=filtered.filter(m=>m.primary_media_path).map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");return{url:u,isVideo:isV,moment:m}});
+  // #4 Include audio in mediaList for lightbox swipe
+  const mediaList=filtered.filter(m=>m.primary_media_path).map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");const isA=m.primary_media_path?.endsWith(".ogg")||m.primary_media_path?.endsWith(".mp3")||m.primary_media_path?.endsWith(".oga");return{url:u,isVideo:isV,isAudio:isA,moment:m}});
   const openLightbox=data=>setLightbox(data);
 
   return(
@@ -356,9 +251,14 @@ export default function App(){
         @keyframes pickerIn{from{opacity:0;transform:translateY(6px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}
         @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
         @keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes emptyBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes emptyFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
+        @keyframes dotPulse{0%,100%{opacity:0.3;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
         .bloom{animation:bloomIn 0.5s ease-out forwards;opacity:0}
         .heart-pop{animation:heartPop 0.3s ease-out}
         .toast-in{animation:toastIn 0.25s ease-out}
+        .empty-icon{animation:emptyBounce 2s ease-in-out infinite}
+        .empty-float{animation:emptyFloat 3s ease-in-out infinite}
         .shimmer-overlay{overflow:hidden}.shimmer-overlay::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.4) 50%,transparent 100%);animation:shimmer 1.8s ease-in-out infinite}
         .petal-card{border-radius:24px;padding:24px;position:relative;overflow:hidden;transition:transform 0.3s,box-shadow 0.3s;box-shadow:0 1px 4px rgba(0,0,0,0.03),0 4px 14px rgba(0,0,0,0.02)}.petal-card:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(0,0,0,0.06)}
         .petal-btn{padding:8px 18px;border-radius:24px;cursor:pointer;font-size:13px;font-family:${S};font-weight:600;border:2px solid #ede5dc;background:white;color:#9b8a78;transition:all 0.2s}.petal-btn:hover{border-color:#d4bfb0;color:#6b5d50}.petal-btn.on{border-color:#c97b8b;background:#fff5f7;color:#c97b8b}
@@ -376,11 +276,7 @@ export default function App(){
         .sticky-date{position:sticky;top:0;z-index:10;padding:10px 0 10px 0;margin:-10px 0 8px -32px;background:#faf8f5}
         .sticky-date::after{content:'';position:absolute;bottom:0;left:32px;right:0;height:1px;background:linear-gradient(to right,rgba(201,123,139,0.15),transparent 80%)}
         .view-crossfade{animation:fadeIn 0.3s ease-out}
-        @keyframes emptyBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-        @keyframes emptyFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
-        .empty-icon{animation:emptyBounce 2s ease-in-out infinite}
-        .empty-float{animation:emptyFloat 3s ease-in-out infinite}
-        @keyframes dotPulse{0%,100%{opacity:0.3;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
+        .edit-area{width:100%;border:2px solid #c97b8b;border-radius:14px;padding:12px;font-size:16px;font-family:'Source Sans 3',sans-serif;background:#fff8f6;outline:none;resize:vertical;min-height:60px;color:#4a3a3f;line-height:1.5}
       `}</style>
 
       <div style={{padding:"52px 24px 36px",textAlign:"center",position:"relative",overflow:"hidden"}}>
@@ -407,6 +303,7 @@ export default function App(){
         <button className={`view-btn ${aiMode?"on":""}`} onClick={()=>{setAi(!aiMode);setAiR(null);setSe("")}}>🤖</button>
         <button className={`view-btn ${view==="timeline"?"on":""}`} onClick={()=>setV("timeline")}>📋</button>
         <button className={`view-btn ${view==="gallery"?"on":""}`} onClick={()=>setV("gallery")}>🖼</button>
+        <button className={`view-btn ${view==="milestones"?"on":""}`} onClick={()=>setV("milestones")}>🏆</button>
         <button className={`view-btn ${showFav?"on":""}`} onClick={()=>setSF(!showFav)}>⭐</button>
       </div>
 
@@ -428,11 +325,14 @@ export default function App(){
         <div key={view} className="view-crossfade">
         {loading?<SkeletonTimeline/>
         :view==="gallery"?<GalleryView moments={filtered} onImageClick={openLightbox}/>
+        :view==="milestones"?<MilestonesView moments={filtered}/>
         :filtered.length===0?<EmptyState type={aiMode&&search?"ai":search?"search":showFav?"fav":"empty"}/>
         :(<div style={{position:"relative",paddingLeft:"32px"}}>
             <div style={{position:"absolute",left:"11px",top:0,bottom:0,width:"2px",background:"linear-gradient(to bottom,#c97b8b,#ddd4f0,#f0e4c8)",borderRadius:"1px"}}/>
-            {Object.entries(grouped).map(([date,items])=>(<div key={date} style={{marginBottom:"36px"}}><div className="sticky-date"><div style={{display:"flex",alignItems:"center"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#dbb0bb)",border:"3px solid #faf8f5",flexShrink:0,zIndex:1,boxShadow:"0 2px 6px rgba(201,123,139,0.2)"}}/><div style={{fontSize:"12px",letterSpacing:"2.5px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginLeft:"14px"}}>{date}</div></div></div>
-              <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{items.map((m,idx)=>(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} onImageClick={openLightbox} toast={toast}/></div>))}</div></div>))}
+            {Object.entries(grouped).map(([date,items])=>{
+              const clusters=clusterMoments(items);
+              return(<div key={date} style={{marginBottom:"36px"}}><div className="sticky-date"><div style={{display:"flex",alignItems:"center"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#dbb0bb)",border:"3px solid #faf8f5",flexShrink:0,zIndex:1,boxShadow:"0 2px 6px rgba(201,123,139,0.2)"}}/><div style={{fontSize:"12px",letterSpacing:"2.5px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginLeft:"14px"}}>{date}</div></div></div>
+              <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{clusters.map((cl,idx)=>{const m=cl.primary;return(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} extraMoments={cl.extra} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} onImageClick={openLightbox} toast={toast} onEdit={updateMoment}/></div>)})}</div></div>)})}
           </div>)}
         {view==="timeline"&&hasMore&&<div ref={sentinelRef} style={{display:"flex",justifyContent:"center",padding:"24px"}}><div className="loading-dots" style={{display:"flex",gap:"6px",alignItems:"center"}}><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#d0bfc3"}}>Loading more</span>{[0,1,2].map(i=><div key={i} style={{width:"6px",height:"6px",borderRadius:"50%",background:"#d0bfc3",animation:`dotPulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div></div>}
         </div>
@@ -444,31 +344,18 @@ export default function App(){
   );
 }
 
-/* ---- Video thumbnail (extracts poster frame) ---- */
+/* ---- Video thumbnail ---- */
 function VideoThumbnail({src,style={},onClick}){
-  const[poster,setPoster]=useState(null);
-  const[err,setErr]=useState(false);
-  useEffect(()=>{
-    const v=document.createElement("video");
-    v.crossOrigin="anonymous";v.preload="metadata";v.muted=true;v.playsInline=true;
-    v.onloadeddata=()=>{v.currentTime=Math.min(1,v.duration*0.1)};
-    v.onseeked=()=>{try{const c=document.createElement("canvas");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);setPoster(c.toDataURL("image/jpeg",0.7))}catch{setErr(true)}};
-    v.onerror=()=>setErr(true);
-    v.src=src;
-    return()=>{v.src="";v.load()};
-  },[src]);
-
-  return(
-    <div style={{position:"relative",borderRadius:"18px",overflow:"hidden",...style}} onClick={onClick}>
-      {poster?<img src={poster} alt="" style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover",display:"block"}}/>
-      :!err?<div style={{width:"100%",minHeight:"180px",background:"linear-gradient(135deg,#f5eff0 0%,#ede5e8 50%,#f0e8ec 100%)",borderRadius:"18px",position:"relative"}}><div className="shimmer-overlay" style={{position:"absolute",inset:0,borderRadius:"18px"}}/></div>
-      :<div style={{width:"100%",minHeight:"180px",background:"#f5eff0",borderRadius:"18px",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#d0bfc3",fontSize:"13px",fontFamily:S,fontWeight:600}}>🎬 Video</span></div>}
-      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(92,74,79,0.6)",borderRadius:"50%",width:"48px",height:"48px",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"18px",backdropFilter:"blur(4px)",boxShadow:"0 4px 12px rgba(0,0,0,0.15)",transition:"background 0.2s",cursor:"pointer",zIndex:2}}>▶</div>
-    </div>
-  );
+  const[poster,setPoster]=useState(null);const[err,setErr]=useState(false);
+  useEffect(()=>{const v=document.createElement("video");v.crossOrigin="anonymous";v.preload="metadata";v.muted=true;v.playsInline=true;v.onloadeddata=()=>{v.currentTime=Math.min(1,v.duration*0.1)};v.onseeked=()=>{try{const c=document.createElement("canvas");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);setPoster(c.toDataURL("image/jpeg",0.7))}catch{setErr(true)}};v.onerror=()=>setErr(true);v.src=src;return()=>{v.src="";v.load()}},[src]);
+  return(<div style={{position:"relative",borderRadius:"18px",overflow:"hidden",...style}} onClick={onClick}>
+    {poster?<img src={poster} alt="" style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover",display:"block"}}/>:!err?<div style={{width:"100%",minHeight:"180px",background:"linear-gradient(135deg,#f5eff0 0%,#ede5e8 50%,#f0e8ec 100%)",borderRadius:"18px",position:"relative"}}><div className="shimmer-overlay" style={{position:"absolute",inset:0,borderRadius:"18px"}}/></div>:<div style={{width:"100%",minHeight:"180px",background:"#f5eff0",borderRadius:"18px",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#d0bfc3",fontSize:"13px",fontFamily:S,fontWeight:600}}>🎬 Video</span></div>}
+    <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(92,74,79,0.6)",borderRadius:"50%",width:"48px",height:"48px",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"18px",backdropFilter:"blur(4px)",boxShadow:"0 4px 12px rgba(0,0,0,0.15)",transition:"background 0.2s",cursor:"pointer",zIndex:2}}>▶</div>
+  </div>);
 }
 
-function Card({m,faved,onFav,reactions,onReact,onImageClick,toast}){
+/* ---- Card with inline edit + multi-photo carousel ---- */
+function Card({m,extraMoments=[],faved,onFav,reactions,onReact,onImageClick,toast,onEdit}){
   const time=new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   const url=m.primary_media_path?`${MEDIA}/${m.primary_media_path}`:null;
   const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");
@@ -476,18 +363,45 @@ function Card({m,faved,onFav,reactions,onReact,onImageClick,toast}){
   const isI=m.primary_media_path?.endsWith(".jpg")||m.primary_media_path?.endsWith(".jpeg")||m.primary_media_path?.endsWith(".png")||m.primary_media_path?.endsWith(".webp");
   const isM=m.type==="Milestone";const hide=m.text.startsWith("[")&&m.text.endsWith("]");
   const[conf,setConf]=useState(false);const wash=KID_WASH[m.kid]||KID_WASH.Family;
+  const[editing,setEditing]=useState(false);const[editText,setEditText]=useState(m.text);
   useEffect(()=>{if(isM){setConf(true);const t=setTimeout(()=>setConf(false),3000);return()=>clearTimeout(t)}},[]);
+
+  const allMedia=[m,...extraMoments];
+  const hasCarousel=allMedia.filter(x=>x.primary_media_path).length>1;
+
+  const saveEdit=()=>{if(editText.trim()&&editText!==m.text){onEdit(m.id,editText.trim())}setEditing(false)};
+  const cancelEdit=()=>{setEditText(m.text);setEditing(false)};
 
   return(<div className="petal-card" style={{background:wash.bg,border:`1.5px solid ${wash.border}`}}>
     {isM&&<Confetti active={conf}/>}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px",position:"relative",zIndex:3}}>
       <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"22px"}}>{EMOJI[m.type]||"✨"}</span><div><span style={{fontSize:"15px",fontFamily:S,fontWeight:700,color:"#6b5560"}}>{m.kid}</span><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#c4a8ae",marginLeft:"6px"}}>{m.type}</span></div></div>
-      <div style={{display:"flex",alignItems:"center",gap:"6px"}}><ShareBtn m={m} toast={toast}/><button onClick={onFav} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+        {!editing&&<button onClick={()=>setEditing(true)} title="Edit" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>✏️</button>}
+        <ShareBtn m={m} toast={toast}/><button onClick={onFav} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span>
+      </div>
     </div>
-    {!hide&&(<div style={{fontSize:"17px",lineHeight:1.6,color:"#4a3a3f",marginBottom:"14px",fontStyle:m.type==="Quote"?"italic":"normal",position:"relative",zIndex:3}}>{m.type==="Quote"?<>&#8220;{m.text}&#8221;</>:`"${m.text}"`}</div>)}
-    {isV&&url&&<div style={{marginBottom:"14px"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:true,moment:m})}><VideoThumbnail src={url}/></div>}
-    {isI&&url&&<div style={{marginBottom:"14px",overflow:"hidden"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,moment:m})}><ProgressiveImage src={url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}} /></div>}
-    {isA&&url&&<WavePlayer src={url}/>}
+    {!hide&&(editing?(
+      <div style={{marginBottom:"14px",position:"relative",zIndex:3}}>
+        <textarea className="edit-area" value={editText} onChange={e=>setEditText(e.target.value)} autoFocus/>
+        <div style={{display:"flex",gap:"8px",marginTop:"8px"}}>
+          <button onClick={saveEdit} style={{padding:"6px 16px",borderRadius:"16px",border:"none",background:"#c97b8b",color:"white",fontSize:"13px",fontFamily:S,fontWeight:600,cursor:"pointer"}}>Save</button>
+          <button onClick={cancelEdit} style={{padding:"6px 16px",borderRadius:"16px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"13px",fontFamily:S,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+        </div>
+      </div>
+    ):(
+      <div style={{fontSize:"17px",lineHeight:1.6,color:"#4a3a3f",marginBottom:"14px",fontStyle:m.type==="Quote"?"italic":"normal",position:"relative",zIndex:3}}>{m.type==="Quote"?<>&#8220;{m.text}&#8221;</>:`"${m.text}"`}</div>
+    ))}
+    {hasCarousel?<MediaCarousel items={allMedia} onImageClick={onImageClick}/>:(<>
+      {isV&&url&&<div style={{marginBottom:"14px"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:true,moment:m})}><VideoThumbnail src={url}/></div>}
+      {isI&&url&&<div style={{marginBottom:"14px",overflow:"hidden"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,moment:m})}><ProgressiveImage src={url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}} /></div>}
+    </>)}
+    {isA&&url&&<div className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,isAudio:true,moment:m})} style={{cursor:"pointer"}}><WavePlayer src={url}/></div>}
+    {extraMoments.length>0&&extraMoments.some(x=>!x.primary_media_path&&!(x.text.startsWith("[")&&x.text.endsWith("]")))&&(
+      <div style={{borderTop:`1px solid ${wash.border}`,marginTop:"12px",paddingTop:"12px"}}>
+        {extraMoments.filter(x=>!x.primary_media_path&&!(x.text.startsWith("[")&&x.text.endsWith("]"))).map(x=><div key={x.id} style={{fontSize:"15px",lineHeight:1.5,color:"#6b5560",marginBottom:"4px"}}>"{x.text}"</div>)}
+      </div>
+    )}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px",position:"relative",zIndex:3}}><span style={{fontSize:"13px",fontFamily:S,fontWeight:700,color:A_CLR[m.author]||"#888"}}>{m.author}</span><div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>{Array.isArray(m.tags)&&m.tags.slice(0,3).map((t,i)=><span key={i} className="tag-f" style={{border:`1px solid ${wash.border}`}}>{t}</span>)}</div></div>
     <Reactions mid={m.id} rx={reactions} onR={onReact} toast={toast}/>
   </div>);
