@@ -142,31 +142,77 @@ function WavePlayer({src}){const[playing,setP]=useState(false);const[progress,se
 
 function CalendarHeatmap({moments}){const today=new Date();const days=91;const cm={};moments.forEach(m=>{const d=new Date(m.created_at).toISOString().split("T")[0];cm[d]=(cm[d]||0)+1});const cells=[];for(let i=days-1;i>=0;i--){const d=new Date(today);d.setDate(d.getDate()-i);const k=d.toISOString().split("T")[0];cells.push({date:k,count:cm[k]||0,label:d.toLocaleDateString("en-US",{month:"short",day:"numeric"})})}const clr=c=>c===0?"#f0e8e4":c<=2?"#fce4ec":c<=4?"#f48fb1":"#e91e63";return(<div style={{padding:"20px 24px"}}><div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginBottom:"12px"}}>🌱 Growing every day</div><div style={{display:"flex",flexWrap:"wrap",gap:"3px"}}>{cells.map((c,i)=><div key={i} className="heatmap-cell-f" title={`${c.label}: ${c.count} moments`} style={{background:clr(c.count)}}/>)}</div><div style={{display:"flex",gap:"6px",marginTop:"8px",alignItems:"center"}}><span style={{fontSize:"10px",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>Less</span>{[0,1,3,5].map(v=><div key={v} style={{width:"10px",height:"10px",borderRadius:"4px",background:clr(v)}}/>)}<span style={{fontSize:"10px",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>More</span></div></div>);}
 
-function GalleryView({moments,onImageClick}){const wm=moments.filter(m=>m.primary_media_path&&(m.primary_media_path.endsWith(".jpg")||m.primary_media_path.endsWith(".jpeg")||m.primary_media_path.endsWith(".png")||m.primary_media_path.endsWith(".mp4")));if(!wm.length)return<div style={{padding:"60px",textAlign:"center",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>No photos or videos yet 📷</div>;return(<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px",padding:"16px 0"}}>{wm.map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path.endsWith(".mp4");return(<div key={m.id} className="gallery-item-f" onClick={()=>onImageClick({url:u,isVideo:isV,moment:m})}>{isV?(<><video src={u} preload="metadata"/><div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(201,123,139,0.7)",borderRadius:"50%",width:"36px",height:"36px",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"14px",backdropFilter:"blur(4px)"}}>▶</div></>):(<ProgressiveImage src={u} style={{width:"100%",height:"100%",objectFit:"cover"}} />)}</div>)})}</div>);}
+function GalleryView({moments,onImageClick}){const wm=moments.filter(m=>m.primary_media_path&&(m.primary_media_path.endsWith(".jpg")||m.primary_media_path.endsWith(".jpeg")||m.primary_media_path.endsWith(".png")||m.primary_media_path.endsWith(".mp4")));if(!wm.length)return<EmptyState type="gallery"/>;return(<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px",padding:"16px 0"}}>{wm.map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path.endsWith(".mp4");return(<div key={m.id} className="gallery-item-f" onClick={()=>onImageClick({url:u,isVideo:isV,moment:m})}>{isV?(<><video src={u} preload="metadata"/><div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(201,123,139,0.7)",borderRadius:"50%",width:"36px",height:"36px",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"14px",backdropFilter:"blur(4px)"}}>▶</div></>):(<ProgressiveImage src={u} style={{width:"100%",height:"100%",objectFit:"cover"}} />)}</div>)})}</div>);}
 
-function Lightbox({data,onClose}){
+function EmptyState({type}){
+  const configs={
+    empty:{icon:"📖",title:"No moments yet",sub:"Send a photo or message to the Telegram bot to get started!",accent:"#c97b8b"},
+    search:{icon:"🔍",title:"No memories match",sub:"Try a different search term",accent:"#b8a0d0"},
+    ai:{icon:"🤖",title:"No matches found",sub:"Try asking differently, like 'when did Gabby first walk?'",accent:"#c97b8b"},
+    fav:{icon:"⭐",title:"No favorites yet",sub:"Tap the star on any memory to save it here",accent:"#d4a030"},
+    gallery:{icon:"📷",title:"No photos or videos yet",sub:"Send a photo to the bot and it'll show up here",accent:"#c97b8b"},
+  };
+  const c=configs[type]||configs.empty;
+  return(
+    <div style={{textAlign:"center",padding:"60px 20px"}} className="view-crossfade">
+      <div className="empty-icon" style={{fontSize:"48px",marginBottom:"16px",display:"inline-block"}}>{c.icon}</div>
+      <div className="empty-float" style={{display:"inline-block",marginBottom:"20px"}}>
+        <svg width="120" height="80" viewBox="0 0 120 80" fill="none">
+          <rect x="10" y="20" width="40" height="50" rx="8" fill={c.accent} opacity="0.08" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.2"/>
+          <rect x="30" y="10" width="40" height="50" rx="8" fill={c.accent} opacity="0.12" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.25" transform="rotate(6 50 35)"/>
+          <rect x="50" y="18" width="40" height="50" rx="8" fill={c.accent} opacity="0.06" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.15" transform="rotate(-4 70 43)"/>
+          <circle cx="50" cy="35" r="8" fill={c.accent} opacity="0.15"/>
+          <path d="M20 55 L30 42 L40 48 L55 30 L70 50" stroke={c.accent} strokeWidth="1.5" strokeOpacity="0.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div style={{fontSize:"18px",fontWeight:700,color:"#5c4a4f",fontFamily:S,marginBottom:"8px"}}>{c.title}</div>
+      <div style={{fontSize:"14px",color:"#c4a8ae",fontFamily:S,fontWeight:500,maxWidth:"280px",margin:"0 auto",lineHeight:1.5}}>{c.sub}</div>
+    </div>
+  );
+}
+
+function Lightbox({data,onClose,mediaList,onNavigate}){
+  const touchStart=useRef(null);
+  const idx=mediaList?mediaList.findIndex(x=>x.url===data.url):-1;
+  const hasPrev=idx>0;const hasNext=idx<mediaList.length-1;
+  const goPrev=()=>{if(hasPrev)onNavigate(mediaList[idx-1])};
+  const goNext=()=>{if(hasNext)onNavigate(mediaList[idx+1])};
+
   useEffect(()=>{
-    const h=e=>{if(e.key==="Escape")onClose()};
+    const h=e=>{if(e.key==="Escape")onClose();if(e.key==="ArrowLeft")goPrev();if(e.key==="ArrowRight")goNext()};
     window.addEventListener("keydown",h);
     document.body.style.overflow="hidden";
     return()=>{window.removeEventListener("keydown",h);document.body.style.overflow=""};
-  },[onClose]);
+  },[onClose,idx]);
+
+  const onTouchStart=e=>{touchStart.current=e.touches[0].clientX};
+  const onTouchEnd=e=>{if(touchStart.current===null)return;const diff=e.changedTouches[0].clientX-touchStart.current;touchStart.current=null;if(Math.abs(diff)>60){diff>0?goPrev():goNext()}};
 
   const{url,isVideo,moment:m}=data;
+  const navBtn={position:"absolute",top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:"28px",width:"48px",height:"48px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)",transition:"background 0.2s,opacity 0.2s",zIndex:1001,fontFamily:"sans-serif"};
+  const counter=mediaList&&mediaList.length>1?`${idx+1} / ${mediaList.length}`:null;
+
   return(
-    <div className="lightbox-f" onClick={onClose}>
+    <div className="lightbox-f" onClick={onClose} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <button onClick={onClose} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s",zIndex:1001}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"}>✕</button>
-      {isVideo?(
-        <video controls autoPlay playsInline style={{maxWidth:"92vw",maxHeight:"75vh",borderRadius:"20px"}} onClick={e=>e.stopPropagation()}><source src={url} type="video/mp4"/></video>
-      ):(
-        <img src={url} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:"92vw",maxHeight:"80vh",objectFit:"contain",borderRadius:"12px",cursor:"default",animation:"scaleIn 0.25s ease-out"}}/>
-      )}
-      {m&&!(m.text.startsWith("[")&&m.text.endsWith("]"))&&(
-        <div style={{color:"white",marginTop:"20px",textAlign:"center",maxWidth:"480px"}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:"20px",lineHeight:1.5,fontFamily:S}}>"{m.text}"</div>
-          <div style={{fontSize:"12px",color:"rgba(255,255,255,0.5)",marginTop:"8px",fontFamily:S,fontWeight:600}}>{m.author} · {new Date(m.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div>
-        </div>
-      )}
+      {hasPrev&&<button onClick={e=>{e.stopPropagation();goPrev()}} style={{...navBtn,left:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>‹</button>}
+      {hasNext&&<button onClick={e=>{e.stopPropagation();goNext()}} style={{...navBtn,right:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>›</button>}
+      <div key={url} style={{animation:"scaleIn 0.25s ease-out"}}>
+        {isVideo?(
+          <video controls autoPlay playsInline style={{maxWidth:"92vw",maxHeight:"70vh",borderRadius:"20px"}} onClick={e=>e.stopPropagation()}><source src={url} type="video/mp4"/></video>
+        ):(
+          <img src={url} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:"92vw",maxHeight:"75vh",objectFit:"contain",borderRadius:"12px",cursor:"default"}}/>
+        )}
+      </div>
+      <div onClick={e=>e.stopPropagation()} style={{color:"white",marginTop:"16px",textAlign:"center",maxWidth:"480px"}}>
+        {counter&&<div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)",fontFamily:S,fontWeight:700,marginBottom:"6px",letterSpacing:"1px"}}>{counter}</div>}
+        {m&&!(m.text.startsWith("[")&&m.text.endsWith("]"))&&(
+          <>
+            <div style={{fontSize:"20px",lineHeight:1.5,fontFamily:S}}>"{m.text}"</div>
+            <div style={{fontSize:"12px",color:"rgba(255,255,255,0.5)",marginTop:"8px",fontFamily:S,fontWeight:600}}>{m.author} · {new Date(m.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -196,6 +242,7 @@ export default function App(){
   const grp=items=>{const g={};items.forEach(m=>{const k=new Date(m.created_at).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});if(!g[k])g[k]=[];g[k].push(m)});return g};
   const grouped=grp(filtered);const fmtMo=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})};const getRx=id=>reactions.filter(r=>r.moment_id===id);
 
+  const mediaList=filtered.filter(m=>m.primary_media_path).map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");return{url:u,isVideo:isV,moment:m}});
   const openLightbox=data=>setLightbox(data);
 
   return(
@@ -230,6 +277,11 @@ export default function App(){
         .clickable-media{cursor:zoom-in;transition:transform 0.2s,box-shadow 0.2s}.clickable-media:hover{transform:scale(1.02);box-shadow:0 4px 16px rgba(0,0,0,0.1)}
         .sticky-date{position:sticky;top:0;z-index:10;padding:10px 0 10px 0;margin:-10px 0 8px -32px;background:#faf8f5}
         .sticky-date::after{content:'';position:absolute;bottom:0;left:32px;right:0;height:1px;background:linear-gradient(to right,rgba(201,123,139,0.15),transparent 80%)}
+        .view-crossfade{animation:fadeIn 0.3s ease-out}
+        @keyframes emptyBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes emptyFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
+        .empty-icon{animation:emptyBounce 2s ease-in-out infinite}
+        .empty-float{animation:emptyFloat 3s ease-in-out infinite}
       `}</style>
 
       <div style={{padding:"52px 24px 36px",textAlign:"center",position:"relative",overflow:"hidden"}}>
@@ -274,17 +326,19 @@ export default function App(){
       {view==="timeline"&&otd.length>0&&(<div style={{maxWidth:"640px",margin:"0 auto",padding:"16px 16px 0"}}><div style={{background:"linear-gradient(135deg,#fffcf0,#fff5e0)",borderRadius:"22px",padding:"18px 22px",border:"1.5px solid #f5e4c0"}}><div style={{fontSize:"12px",letterSpacing:"2px",textTransform:"uppercase",color:"#d4a030",fontFamily:S,fontWeight:700,marginBottom:"10px"}}>✨ On this day</div>{otd.map(m=><div key={m.id} style={{fontSize:"18px",color:"#5c4a4f",marginBottom:"6px",lineHeight:1.4}}>"{m.text}" <span style={{fontFamily:S,fontSize:"12px",color:"#c4a8ae",fontWeight:600}}>- {m.author}, {new Date(m.created_at).getFullYear()}</span></div>)}</div></div>)}
 
       <div style={{maxWidth:"640px",margin:"0 auto",padding:"28px 16px"}}>
+        <div key={view} className="view-crossfade">
         {loading?<SkeletonTimeline/>
         :view==="gallery"?<GalleryView moments={filtered} onImageClick={openLightbox}/>
-        :filtered.length===0?<div style={{textAlign:"center",padding:"80px",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>{aiMode&&search?"No matches found. Try asking differently!":search?"No memories match.":showFav?"No favorites yet. Tap ⭐ on a memory!":"No moments yet. Send one to the bot!"}</div>
+        :filtered.length===0?<EmptyState type={aiMode&&search?"ai":search?"search":showFav?"fav":"empty"}/>
         :(<div style={{position:"relative",paddingLeft:"32px"}}>
             <div style={{position:"absolute",left:"11px",top:0,bottom:0,width:"2px",background:"linear-gradient(to bottom,#c97b8b,#ddd4f0,#f0e4c8)",borderRadius:"1px"}}/>
             {Object.entries(grouped).map(([date,items])=>(<div key={date} style={{marginBottom:"36px"}}><div className="sticky-date"><div style={{display:"flex",alignItems:"center"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#dbb0bb)",border:"3px solid #faf8f5",flexShrink:0,zIndex:1,boxShadow:"0 2px 6px rgba(201,123,139,0.2)"}}/><div style={{fontSize:"12px",letterSpacing:"2.5px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginLeft:"14px"}}>{date}</div></div></div>
               <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{items.map((m,idx)=>(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} onImageClick={openLightbox} toast={toast}/></div>))}</div></div>))}
           </div>)}
+        </div>
       </div>
       <div style={{textAlign:"center",padding:"40px",fontSize:"20px",color:"#e0d0d5"}}>made with ❤️ by the Henes family</div>
-      {lightbox&&<Lightbox data={lightbox} onClose={()=>setLightbox(null)}/>}
+      {lightbox&&<Lightbox data={lightbox} onClose={()=>setLightbox(null)} mediaList={mediaList} onNavigate={setLightbox}/>}
       <ToastContainer toasts={toasts}/>
     </div>
   );
