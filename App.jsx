@@ -60,7 +60,34 @@ function WavePlayer({src}){const[playing,setP]=useState(false);const[progress,se
 
 function CalendarHeatmap({moments}){const today=new Date();const days=91;const cm={};moments.forEach(m=>{const d=new Date(m.created_at).toISOString().split("T")[0];cm[d]=(cm[d]||0)+1});const cells=[];for(let i=days-1;i>=0;i--){const d=new Date(today);d.setDate(d.getDate()-i);const k=d.toISOString().split("T")[0];cells.push({date:k,count:cm[k]||0,label:d.toLocaleDateString("en-US",{month:"short",day:"numeric"})})}const clr=c=>c===0?"#f0e8e4":c<=2?"#fce4ec":c<=4?"#f48fb1":"#e91e63";return(<div style={{padding:"20px 24px"}}><div style={{fontSize:"11px",letterSpacing:"2px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginBottom:"12px"}}>🌱 Growing every day</div><div style={{display:"flex",flexWrap:"wrap",gap:"3px"}}>{cells.map((c,i)=><div key={i} className="heatmap-cell-f" title={`${c.label}: ${c.count} moments`} style={{background:clr(c.count)}}/>)}</div><div style={{display:"flex",gap:"6px",marginTop:"8px",alignItems:"center"}}><span style={{fontSize:"10px",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>Less</span>{[0,1,3,5].map(v=><div key={v} style={{width:"10px",height:"10px",borderRadius:"4px",background:clr(v)}}/>)}<span style={{fontSize:"10px",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>More</span></div></div>);}
 
-function GalleryView({moments}){const[sel,setSel]=useState(null);const wm=moments.filter(m=>m.primary_media_path&&(m.primary_media_path.endsWith(".jpg")||m.primary_media_path.endsWith(".jpeg")||m.primary_media_path.endsWith(".png")||m.primary_media_path.endsWith(".mp4")));if(!wm.length)return<div style={{padding:"60px",textAlign:"center",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>No photos or videos yet 📷</div>;return(<><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px",padding:"16px 0"}}>{wm.map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path.endsWith(".mp4");return(<div key={m.id} className="gallery-item-f" onClick={()=>setSel(m)}>{isV?(<><video src={u} preload="metadata"/><div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(201,123,139,0.7)",borderRadius:"50%",width:"36px",height:"36px",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"14px",backdropFilter:"blur(4px)"}}>▶</div></>):(<img src={u} alt=""/>)}</div>)})}</div>{sel&&(<div className="lightbox-f" onClick={()=>setSel(null)}>{sel.primary_media_path.endsWith(".mp4")?(<video controls autoPlay playsInline style={{maxWidth:"100%",maxHeight:"70vh",borderRadius:"20px"}} onClick={e=>e.stopPropagation()}><source src={`${MEDIA}/${sel.primary_media_path}`} type="video/mp4"/></video>):(<img src={`${MEDIA}/${sel.primary_media_path}`} style={{maxWidth:"100%",maxHeight:"70vh",borderRadius:"20px"}} alt=""/>)}<div style={{color:"white",marginTop:"20px",textAlign:"center",maxWidth:"480px"}}>{!(sel.text.startsWith("[")&&sel.text.endsWith("]"))&&<div style={{fontSize:"20px",lineHeight:1.5,fontFamily:S}}>"{sel.text}"</div>}<div style={{fontSize:"12px",color:"rgba(255,255,255,0.5)",marginTop:"8px",fontFamily:S,fontWeight:600}}>{sel.author} · {new Date(sel.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div></div></div>)}</>);}
+function GalleryView({moments,onImageClick}){const[sel,setSel]=useState(null);const wm=moments.filter(m=>m.primary_media_path&&(m.primary_media_path.endsWith(".jpg")||m.primary_media_path.endsWith(".jpeg")||m.primary_media_path.endsWith(".png")||m.primary_media_path.endsWith(".mp4")));if(!wm.length)return<div style={{padding:"60px",textAlign:"center",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>No photos or videos yet 📷</div>;return(<><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px",padding:"16px 0"}}>{wm.map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path.endsWith(".mp4");return(<div key={m.id} className="gallery-item-f" onClick={()=>onImageClick({url:u,isVideo:isV,moment:m})}>{isV?(<><video src={u} preload="metadata"/><div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(201,123,139,0.7)",borderRadius:"50%",width:"36px",height:"36px",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"14px",backdropFilter:"blur(4px)"}}>▶</div></>):(<img src={u} alt=""/>)}</div>)})}</div></>);}
+
+function Lightbox({data,onClose}){
+  useEffect(()=>{
+    const h=e=>{if(e.key==="Escape")onClose()};
+    window.addEventListener("keydown",h);
+    document.body.style.overflow="hidden";
+    return()=>{window.removeEventListener("keydown",h);document.body.style.overflow=""};
+  },[onClose]);
+
+  const{url,isVideo,moment:m}=data;
+  return(
+    <div className="lightbox-f" onClick={onClose}>
+      <button onClick={onClose} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s",zIndex:1001}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"}>✕</button>
+      {isVideo?(
+        <video controls autoPlay playsInline style={{maxWidth:"92vw",maxHeight:"75vh",borderRadius:"20px"}} onClick={e=>e.stopPropagation()}><source src={url} type="video/mp4"/></video>
+      ):(
+        <img src={url} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:"92vw",maxHeight:"80vh",objectFit:"contain",borderRadius:"12px",cursor:"default",animation:"scaleIn 0.25s ease-out"}}/>
+      )}
+      {m&&!(m.text.startsWith("[")&&m.text.endsWith("]"))&&(
+        <div style={{color:"white",marginTop:"20px",textAlign:"center",maxWidth:"480px"}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:"20px",lineHeight:1.5,fontFamily:S}}>"{m.text}"</div>
+          <div style={{fontSize:"12px",color:"rgba(255,255,255,0.5)",marginTop:"8px",fontFamily:S,fontWeight:600}}>{m.author} · {new Date(m.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function App(){
   const[moments,setM]=useState([]);const[reactions,setRx]=useState([]);const[loading,setL]=useState(true);
@@ -68,6 +95,7 @@ export default function App(){
   const[search,setSe]=useState("");const[aiMode,setAi]=useState(false);const[aiR,setAiR]=useState(null);const[aiL,setAiL]=useState(false);
   const[view,setV]=useState("timeline");const[favs,setFavs]=useState(()=>{try{return JSON.parse(sessionStorage.getItem("faves")||"[]")}catch{return[]}});
   const[showFav,setSF]=useState(false);const[selMo,setSelMo]=useState("all");const sTimer=useRef(null);
+  const[lightbox,setLightbox]=useState(null);
 
   const fetchM=()=>fetch(`${SB}/rest/v1/moments?order=created_at.desc&limit=500`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setM(d)}).catch(console.error);
   const fetchR=()=>fetch(`${SB}/rest/v1/reactions?order=created_at.asc`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setRx(d)}).catch(console.error);
@@ -85,6 +113,8 @@ export default function App(){
   const grp=items=>{const g={};items.forEach(m=>{const k=new Date(m.created_at).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});if(!g[k])g[k]=[];g[k].push(m)});return g};
   const grouped=grp(filtered);const fmtMo=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})};const getRx=id=>reactions.filter(r=>r.moment_id===id);
 
+  const openLightbox=data=>setLightbox(data);
+
   return(
     <div style={{minHeight:"100vh",background:"#faf8f5",fontFamily:"'Source Sans 3',sans-serif"}}>
       <style>{`
@@ -92,6 +122,7 @@ export default function App(){
         *{margin:0;padding:0;box-sizing:border-box}body{background:#faf8f5;-webkit-font-smoothing:antialiased}
         @keyframes bloomIn{from{opacity:0;transform:scale(0.92) translateY(16px)}to{opacity:1;transform:scale(1) translateY(0)}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes scaleIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
         @keyframes confettiFall{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(400px) rotate(720deg)}}
         @keyframes heartPop{0%{transform:scale(1)}25%{transform:scale(1.4)}50%{transform:scale(0.9)}100%{transform:scale(1)}}
         @keyframes pickerIn{from{opacity:0;transform:translateY(6px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -109,6 +140,7 @@ export default function App(){
         .gallery-item-f{aspect-ratio:1;border-radius:16px;overflow:hidden;cursor:pointer;position:relative;background:#f5eff0;transition:transform 0.2s,box-shadow 0.2s}.gallery-item-f:hover{transform:scale(1.03);box-shadow:0 6px 20px rgba(0,0,0,0.08)}.gallery-item-f img,.gallery-item-f video{width:100%;height:100%;object-fit:cover}
         .lightbox-f{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(92,74,79,0.85);z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px;cursor:pointer;animation:fadeIn 0.2s;backdrop-filter:blur(8px)}
         .heatmap-cell-f{width:13px;height:13px;border-radius:4px;cursor:pointer;transition:transform 0.1s}.heatmap-cell-f:hover{transform:scale(1.4)}
+        .clickable-media{cursor:zoom-in;transition:transform 0.2s,box-shadow 0.2s}.clickable-media:hover{transform:scale(1.02);box-shadow:0 4px 16px rgba(0,0,0,0.1)}
       `}</style>
 
       <div style={{padding:"52px 24px 36px",textAlign:"center",position:"relative",overflow:"hidden"}}>
@@ -154,20 +186,21 @@ export default function App(){
 
       <div style={{maxWidth:"640px",margin:"0 auto",padding:"28px 16px"}}>
         {loading?<div style={{textAlign:"center",padding:"80px",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>Loading memories...</div>
-        :view==="gallery"?<GalleryView moments={filtered}/>
+        :view==="gallery"?<GalleryView moments={filtered} onImageClick={openLightbox}/>
         :filtered.length===0?<div style={{textAlign:"center",padding:"80px",color:"#d0bfc3",fontFamily:S,fontWeight:600}}>{aiMode&&search?"No matches found. Try asking differently!":search?"No memories match.":showFav?"No favorites yet. Tap ⭐ on a memory!":"No moments yet. Send one to the bot!"}</div>
         :(<div style={{position:"relative",paddingLeft:"32px"}}>
             <div style={{position:"absolute",left:"11px",top:0,bottom:0,width:"2px",background:"linear-gradient(to bottom,#c97b8b,#ddd4f0,#f0e4c8)",borderRadius:"1px"}}/>
             {Object.entries(grouped).map(([date,items])=>(<div key={date} style={{marginBottom:"36px"}}><div style={{display:"flex",alignItems:"center",marginBottom:"18px",marginLeft:"-32px"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#dbb0bb)",border:"3px solid #faf8f5",flexShrink:0,zIndex:1,boxShadow:"0 2px 6px rgba(201,123,139,0.2)"}}/><div style={{fontSize:"12px",letterSpacing:"2.5px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginLeft:"14px"}}>{date}</div></div>
-              <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{items.map((m,idx)=>(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR}/></div>))}</div></div>))}
+              <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{items.map((m,idx)=>(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} onImageClick={openLightbox}/></div>))}</div></div>))}
           </div>)}
       </div>
       <div style={{textAlign:"center",padding:"40px",fontSize:"20px",color:"#e0d0d5"}}>made with ❤️ by the Henes family</div>
+      {lightbox&&<Lightbox data={lightbox} onClose={()=>setLightbox(null)}/>}
     </div>
   );
 }
 
-function Card({m,faved,onFav,reactions,onReact}){
+function Card({m,faved,onFav,reactions,onReact,onImageClick}){
   const time=new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   const url=m.primary_media_path?`${MEDIA}/${m.primary_media_path}`:null;
   const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");
@@ -184,8 +217,8 @@ function Card({m,faved,onFav,reactions,onReact}){
       <div style={{display:"flex",alignItems:"center",gap:"6px"}}><ShareBtn m={m}/><button onClick={onFav} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span></div>
     </div>
     {!hide&&(<div style={{fontSize:"17px",lineHeight:1.6,color:"#4a3a3f",marginBottom:"14px",fontStyle:m.type==="Quote"?"italic":"normal",position:"relative",zIndex:3}}>{m.type==="Quote"?<>&#8220;{m.text}&#8221;</>:`"${m.text}"`}</div>)}
-    {isV&&url&&<div style={{marginBottom:"14px",borderRadius:"18px",overflow:"hidden"}}><video controls playsInline preload="metadata" style={{width:"100%",borderRadius:"18px",maxHeight:"400px",background:"#f5eff0"}}><source src={url} type="video/mp4"/></video></div>}
-    {isI&&url&&<div style={{marginBottom:"14px",borderRadius:"18px",overflow:"hidden",border:`1px solid ${wash.border}`}}><img src={url} alt="" style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}}/></div>}
+    {isV&&url&&<div style={{marginBottom:"14px",borderRadius:"18px",overflow:"hidden"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:true,moment:m})}><video controls playsInline preload="metadata" style={{width:"100%",borderRadius:"18px",maxHeight:"400px",background:"#f5eff0"}} onClick={e=>e.stopPropagation()}><source src={url} type="video/mp4"/></video></div>}
+    {isI&&url&&<div style={{marginBottom:"14px",borderRadius:"18px",overflow:"hidden",border:`1px solid ${wash.border}`}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,moment:m})}><img src={url} alt="" style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}}/></div>}
     {isA&&url&&<WavePlayer src={url}/>}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px",position:"relative",zIndex:3}}><span style={{fontSize:"13px",fontFamily:S,fontWeight:700,color:A_CLR[m.author]||"#888"}}>{m.author}</span><div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>{Array.isArray(m.tags)&&m.tags.slice(0,3).map((t,i)=><span key={i} className="tag-f" style={{border:`1px solid ${wash.border}`}}>{t}</span>)}</div></div>
     <Reactions mid={m.id} rx={reactions} onR={onReact}/>
