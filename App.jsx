@@ -175,8 +175,21 @@ function Lightbox({data,onClose,mediaList,onNavigate}){
   const touchStart=useRef(null);
   const idx=mediaList?mediaList.findIndex(x=>x.url===data.url):-1;
   const hasPrev=idx>0;const hasNext=idx<mediaList.length-1;
-  const goPrev=()=>{if(hasPrev)onNavigate(mediaList[idx-1])};
-  const goNext=()=>{if(hasNext)onNavigate(mediaList[idx+1])};
+  const goPrev=()=>{if(hasPrev){setZoom(1);setPan({x:0,y:0});onNavigate(mediaList[idx-1])}};
+  const goNext=()=>{if(hasNext){setZoom(1);setPan({x:0,y:0});onNavigate(mediaList[idx+1])}};
+
+  // Zoom state
+  const[zoom,setZoom]=useState(1);
+  const[pan,setPan]=useState({x:0,y:0});
+  const pinchStart=useRef(null);
+  const zoomStart=useRef(1);
+  const panStart=useRef({x:0,y:0});
+  const dragging=useRef(false);
+  const dragOrigin=useRef({x:0,y:0});
+  const imgRef=useRef(null);
+
+  // Reset zoom on image change
+  useEffect(()=>{setZoom(1);setPan({x:0,y:0})},[data.url]);
 
   useEffect(()=>{
     const h=e=>{if(e.key==="Escape")onClose();if(e.key==="ArrowLeft")goPrev();if(e.key==="ArrowRight")goNext()};
@@ -185,26 +198,99 @@ function Lightbox({data,onClose,mediaList,onNavigate}){
     return()=>{window.removeEventListener("keydown",h);document.body.style.overflow=""};
   },[onClose,idx]);
 
-  const onTouchStart=e=>{touchStart.current=e.touches[0].clientX};
-  const onTouchEnd=e=>{if(touchStart.current===null)return;const diff=e.changedTouches[0].clientX-touchStart.current;touchStart.current=null;if(Math.abs(diff)>60){diff>0?goPrev():goNext()}};
+  // Scroll wheel zoom (desktop)
+  const onWheel=e=>{
+    e.stopPropagation();e.preventDefault();
+    setZoom(z=>{const next=z-(e.deltaY*0.002);return Math.min(5,Math.max(1,next))});
+  };
+
+  // Touch handlers: 1 finger = swipe nav, 2 fingers = pinch zoom + pan
+  const getDist=ts=>Math.hypot(ts[0].clientX-ts[1].clientX,ts[0].clientY-ts[1].clientY);
+  const getMid=ts=>({x:(ts[0].clientX+ts[1].clientX)/2,y:(ts[0].clientY+ts[1].clientY)/2});
+
+  const onTouchStart=e=>{
+    if(e.touches.length===2){
+      e.preventDefault();
+      pinchStart.current=getDist(e.touches);
+      zoomStart.current=zoom;
+      panStart.current={...pan};
+      dragging.current=false;
+      touchStart.current=null;
+    }else if(e.touches.length===1&&zoom<=1){
+      touchStart.current=e.touches[0].clientX;
+      pinchStart.current=null;
+    }else if(e.touches.length===1&&zoom>1){
+      // Pan when zoomed
+      dragging.current=true;
+      dragOrigin.current={x:e.touches[0].clientX-pan.x,y:e.touches[0].clientY-pan.y};
+      touchStart.current=null;
+      pinchStart.current=null;
+    }
+  };
+  const onTouchMove=e=>{
+    if(e.touches.length===2&&pinchStart.current!==null){
+      e.preventDefault();
+      const dist=getDist(e.touches);
+      const scale=dist/pinchStart.current;
+      const newZoom=Math.min(5,Math.max(1,zoomStart.current*scale));
+      setZoom(newZoom);
+      if(newZoom<=1)setPan({x:0,y:0});
+    }else if(e.touches.length===1&&dragging.current&&zoom>1){
+      e.preventDefault();
+      setPan({x:e.touches[0].clientX-dragOrigin.current.x,y:e.touches[0].clientY-dragOrigin.current.y});
+    }
+  };
+  const onTouchEnd=e=>{
+    if(pinchStart.current!==null){
+      pinchStart.current=null;
+      if(zoom<=1.05){setZoom(1);setPan({x:0,y:0})}
+      return;
+    }
+    if(dragging.current){dragging.current=false;return}
+    if(touchStart.current!==null&&e.changedTouches.length>0){
+      const diff=e.changedTouches[0].clientX-touchStart.current;
+      touchStart.current=null;
+      if(Math.abs(diff)>60){diff>0?goPrev():goNext()}
+    }
+  };
+
+  // Double tap to toggle zoom
+  const lastTap=useRef(0);
+  const onDoubleTap=e=>{
+    const now=Date.now();
+    if(now-lastTap.current<300){
+      e.stopPropagation();
+      if(zoom>1){setZoom(1);setPan({x:0,y:0})}else{setZoom(2.5)}
+    }
+    lastTap.current=now;
+  };
+
+  // Mouse drag when zoomed (desktop)
+  const onMouseDown=e=>{if(zoom>1){dragging.current=true;dragOrigin.current={x:e.clientX-pan.x,y:e.clientY-pan.y};e.preventDefault()}};
+  const onMouseMove=e=>{if(dragging.current&&zoom>1){setPan({x:e.clientX-dragOrigin.current.x,y:e.clientY-dragOrigin.current.y})}};
+  const onMouseUp=()=>{dragging.current=false};
+
+  const handleBackdropClick=e=>{if(zoom>1){setZoom(1);setPan({x:0,y:0})}else{onClose()}};
 
   const{url,isVideo,moment:m}=data;
   const navBtn={position:"absolute",top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:"28px",width:"48px",height:"48px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)",transition:"background 0.2s,opacity 0.2s",zIndex:1001,fontFamily:"sans-serif"};
   const counter=mediaList&&mediaList.length>1?`${idx+1} / ${mediaList.length}`:null;
+  const isZoomed=zoom>1;
 
   return(
-    <div className="lightbox-f" onClick={onClose} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <button onClick={onClose} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s",zIndex:1001}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"}>✕</button>
-      {hasPrev&&<button onClick={e=>{e.stopPropagation();goPrev()}} style={{...navBtn,left:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>‹</button>}
-      {hasNext&&<button onClick={e=>{e.stopPropagation();goNext()}} style={{...navBtn,right:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>›</button>}
-      <div key={url} style={{animation:"scaleIn 0.25s ease-out"}}>
+    <div className="lightbox-f" onClick={handleBackdropClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{touchAction:"none"}}>
+      <button onClick={e=>{e.stopPropagation();onClose()}} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s,opacity 0.2s",zIndex:1001,opacity:isZoomed?0.3:1}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"}>✕</button>
+      {hasPrev&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goPrev()}} style={{...navBtn,left:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>‹</button>}
+      {hasNext&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goNext()}} style={{...navBtn,right:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>›</button>}
+      <div key={url} style={{animation:"scaleIn 0.25s ease-out"}} onWheel={!isVideo?onWheel:undefined}>
         {isVideo?(
           <video controls autoPlay playsInline style={{maxWidth:"92vw",maxHeight:"70vh",borderRadius:"20px"}} onClick={e=>e.stopPropagation()}><source src={url} type="video/mp4"/></video>
         ):(
-          <img src={url} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:"92vw",maxHeight:"75vh",objectFit:"contain",borderRadius:"12px",cursor:"default"}}/>
+          <img ref={imgRef} src={url} alt="" onClick={e=>{e.stopPropagation();onDoubleTap(e)}} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} draggable={false} style={{maxWidth:"92vw",maxHeight:"75vh",objectFit:"contain",borderRadius:"12px",cursor:isZoomed?"grab":"zoom-in",transform:`scale(${zoom}) translate(${pan.x/zoom}px,${pan.y/zoom}px)`,transition:dragging.current?"none":"transform 0.15s ease-out",userSelect:"none",WebkitUserDrag:"none"}}/>
         )}
       </div>
-      <div onClick={e=>e.stopPropagation()} style={{color:"white",marginTop:"16px",textAlign:"center",maxWidth:"480px"}}>
+      {isZoomed&&<div style={{position:"absolute",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,0.5)",borderRadius:"16px",padding:"4px 14px",fontSize:"11px",fontFamily:S,fontWeight:700,color:"rgba(255,255,255,0.6)",backdropFilter:"blur(4px)",pointerEvents:"none"}}>{Math.round(zoom*100)}%</div>}
+      {!isZoomed&&<div onClick={e=>e.stopPropagation()} style={{color:"white",marginTop:"16px",textAlign:"center",maxWidth:"480px"}}>
         {counter&&<div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)",fontFamily:S,fontWeight:700,marginBottom:"6px",letterSpacing:"1px"}}>{counter}</div>}
         {m&&!(m.text.startsWith("[")&&m.text.endsWith("]"))&&(
           <>
@@ -212,7 +298,7 @@ function Lightbox({data,onClose,mediaList,onNavigate}){
             <div style={{fontSize:"12px",color:"rgba(255,255,255,0.5)",marginTop:"8px",fontFamily:S,fontWeight:600}}>{m.author} · {new Date(m.created_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</div>
           </>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
