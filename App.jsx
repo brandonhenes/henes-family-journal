@@ -314,11 +314,11 @@ export default function App(){
           <span style={{position:"absolute",left:"16px",top:"50%",transform:"translateY(-50%)",fontSize:"16px",opacity:0.35}}>{aiMode?"🤖":"🔍"}</span>
           {aiL&&<span style={{position:"absolute",right:"16px",top:"50%",transform:"translateY(-50%)",fontSize:"12px",fontFamily:S,fontWeight:700,color:"#c97b8b"}}>thinking...</span>}
         </div>
-        <button className={`view-btn ${aiMode?"on":""}`} onClick={()=>{setAi(!aiMode);setAiR(null);setSe("")}}>🤖</button>
-        <button className={`view-btn ${view==="timeline"?"on":""}`} onClick={()=>setV("timeline")}>📋</button>
-        <button className={`view-btn ${view==="gallery"?"on":""}`} onClick={()=>setV("gallery")}>🖼</button>
-        <button className={`view-btn ${view==="milestones"?"on":""}`} onClick={()=>setV("milestones")}>🏆</button>
-        <button className={`view-btn ${showFav?"on":""}`} onClick={()=>setSF(!showFav)}>⭐</button>
+        <button title="AI Search" className={`view-btn ${aiMode?"on":""}`} onClick={()=>{setAi(!aiMode);setAiR(null);setSe("")}}>🤖</button>
+        <button title="Timeline" className={`view-btn ${view==="timeline"?"on":""}`} onClick={()=>setV("timeline")}>📋</button>
+        <button title="Gallery" className={`view-btn ${view==="gallery"?"on":""}`} onClick={()=>setV("gallery")}>🖼</button>
+        <button title="Milestones" className={`view-btn ${view==="milestones"?"on":""}`} onClick={()=>setV("milestones")}>🏆</button>
+        <button title="Favorites" className={`view-btn ${showFav?"on":""}`} onClick={()=>setSF(!showFav)}>⭐</button>
       </div>
 
       <div style={{display:"flex",gap:"8px",padding:"12px 24px",overflowX:"auto",background:"white",borderBottom:"1px solid #f5ede8"}}>
@@ -393,7 +393,7 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,onImageClick,toas
       <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
         {!editing&&url&&<button onClick={()=>downloadMedia(url,toast)} title="Download" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>💾</button>}
         {!editing&&<button onClick={()=>setEditing(true)} title="Edit" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>✏️</button>}
-        <ShareBtn m={m} toast={toast}/><button onClick={onFav} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span>
+        <ShareBtn m={m} toast={toast}/><button onClick={onFav} title={faved?"Unfavorite":"Favorite"} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span>
       </div>
     </div>
     {!hide&&(editing?(
