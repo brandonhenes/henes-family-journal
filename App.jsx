@@ -22,6 +22,19 @@ const sbPatch=(p,b)=>fetch(`${SB}/rest/v1/${p}`,{method:"PATCH",headers:{...sbH,
 const gN=()=>{try{return sessionStorage.getItem("jN")||null}catch{return null}};
 const sN=n=>{try{sessionStorage.setItem("jN",n)}catch{}};
 
+/* ---- Download helper ---- */
+const downloadMedia=async(url,toast)=>{
+  try{
+    const res=await fetch(url);const blob=await res.blob();
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    const ext=url.split(".").pop().split("?")[0]||"jpg";
+    const name=`henes-memory-${Date.now()}.${ext}`;
+    a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    if(toast)toast("Saved to downloads","💾");
+  }catch{if(toast)toast("Download failed","❌")}
+};
+
 /* ---- Helpers ---- */
 const ageAt=(kid,date)=>{const b=BIRTHDAYS[kid];if(!b)return null;const d=new Date(date);const mo=((d.getFullYear()-b.getFullYear())*12)+(d.getMonth()-b.getMonth());if(mo<0)return null;if(mo<24)return `${mo}mo`;return `${Math.floor(mo/12)}y ${mo%12}mo`};
 
@@ -134,7 +147,7 @@ function EmptyState({type}){
 }
 
 /* ---- Lightbox with pinch-zoom, swipe nav, audio support ---- */
-function Lightbox({data,onClose,mediaList,onNavigate}){
+function Lightbox({data,onClose,mediaList,onNavigate,toast}){
   const touchStart=useRef(null);const idx=mediaList?mediaList.findIndex(x=>x.url===data.url):-1;
   const hasPrev=idx>0;const hasNext=idx<mediaList.length-1;
   const goPrev=()=>{if(hasPrev){setZoom(1);setPan({x:0,y:0});onNavigate(mediaList[idx-1])}};
@@ -161,6 +174,7 @@ function Lightbox({data,onClose,mediaList,onNavigate}){
 
   return(<div className="lightbox-f" onClick={handleBackdropClick} onTouchStart={onTouchStartL} onTouchMove={onTouchMoveL} onTouchEnd={onTouchEndL} style={{touchAction:"none"}}>
     <button onClick={e=>{e.stopPropagation();onClose()}} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s,opacity 0.2s",zIndex:1001,opacity:isZoomed?0.3:1}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"}>✕</button>
+      {!isAudio&&!isZoomed&&<button onClick={e=>{e.stopPropagation();downloadMedia(url,toast)}} style={{position:"absolute",top:"16px",right:"72px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"18px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)",transition:"background 0.2s",zIndex:1001}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.15)"} title="Download">💾</button>}
     {hasPrev&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goPrev()}} style={{...navBtn,left:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>‹</button>}
     {hasNext&&!isZoomed&&<button onClick={e=>{e.stopPropagation();goNext()}} style={{...navBtn,right:"12px"}} onMouseEnter={e=>e.target.style.background="rgba(255,255,255,0.25)"} onMouseLeave={e=>e.target.style.background="rgba(255,255,255,0.12)"}>›</button>}
     <div key={url} style={{animation:"scaleIn 0.25s ease-out"}} onWheel={!isVideo&&!isAudio?onWheel:undefined} onClick={e=>e.stopPropagation()}>
@@ -338,7 +352,7 @@ export default function App(){
         </div>
       </div>
       <div style={{textAlign:"center",padding:"40px",fontSize:"20px",color:"#e0d0d5"}}>made with ❤️ by the Henes family</div>
-      {lightbox&&<Lightbox data={lightbox} onClose={()=>setLightbox(null)} mediaList={mediaList} onNavigate={setLightbox}/>}
+      {lightbox&&<Lightbox data={lightbox} onClose={()=>setLightbox(null)} mediaList={mediaList} onNavigate={setLightbox} toast={toast}/>}
       <ToastContainer toasts={toasts}/>
     </div>
   );
@@ -377,6 +391,7 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,onImageClick,toas
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px",position:"relative",zIndex:3}}>
       <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"22px"}}>{EMOJI[m.type]||"✨"}</span><div><span style={{fontSize:"15px",fontFamily:S,fontWeight:700,color:"#6b5560"}}>{m.kid}</span><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#c4a8ae",marginLeft:"6px"}}>{m.type}</span></div></div>
       <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+        {!editing&&url&&<button onClick={()=>downloadMedia(url,toast)} title="Download" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>💾</button>}
         {!editing&&<button onClick={()=>setEditing(true)} title="Edit" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>✏️</button>}
         <ShareBtn m={m} toast={toast}/><button onClick={onFav} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span>
       </div>
