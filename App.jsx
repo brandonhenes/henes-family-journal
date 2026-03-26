@@ -368,6 +368,17 @@ function VideoThumbnail({src,style={},onClick}){
   </div>);
 }
 
+/* ---- Voice note preview (static, opens lightbox) ---- */
+function VoicePreview({onClick}){
+  const bars=26;const hs=useRef(Array.from({length:bars},()=>10+Math.random()*28)).current;
+  return(<div onClick={onClick} style={{display:"flex",alignItems:"center",gap:"12px",padding:"12px 16px",background:"rgba(201,123,139,0.06)",borderRadius:"18px",marginBottom:"14px",border:"1px solid rgba(201,123,139,0.1)",cursor:"pointer",transition:"background 0.2s"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(201,123,139,0.1)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(201,123,139,0.06)"}>
+    <div style={{width:"38px",height:"38px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#b8a0d0)",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"13px",flexShrink:0,boxShadow:"0 2px 8px rgba(201,123,139,0.25)"}}>▶</div>
+    <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:"1.5px",height:"34px"}}>{hs.map((h,i)=><div key={i} style={{width:`${100/bars}%`,height:`${h}px`,background:"rgba(201,123,139,0.2)",borderRadius:"3px"}}/>)}</div>
+      <div style={{fontSize:"10px",color:"#c4a8ae",fontFamily:S,fontWeight:600,marginTop:"2px"}}>Tap to play</div>
+    </div>
+  </div>);
+}
+
 /* ---- Card with inline edit + multi-photo carousel ---- */
 function Card({m,extraMoments=[],faved,onFav,reactions,onReact,onImageClick,toast,onEdit}){
   const time=new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
@@ -411,7 +422,7 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,onImageClick,toas
       {isV&&url&&<div style={{marginBottom:"14px"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:true,moment:m})}><VideoThumbnail src={url}/></div>}
       {isI&&url&&<div style={{marginBottom:"14px",overflow:"hidden"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,moment:m})}><ProgressiveImage src={url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}} /></div>}
     </>)}
-    {isA&&url&&<div className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,isAudio:true,moment:m})} style={{cursor:"pointer"}}><WavePlayer src={url}/></div>}
+    {isA&&url&&<VoicePreview onClick={()=>onImageClick({url,isVideo:false,isAudio:true,moment:m})}/>}
     {extraMoments.length>0&&extraMoments.some(x=>!x.primary_media_path&&!(x.text.startsWith("[")&&x.text.endsWith("]")))&&(
       <div style={{borderTop:`1px solid ${wash.border}`,marginTop:"12px",paddingTop:"12px"}}>
         {extraMoments.filter(x=>!x.primary_media_path&&!(x.text.startsWith("[")&&x.text.endsWith("]"))).map(x=><div key={x.id} style={{fontSize:"15px",lineHeight:1.5,color:"#6b5560",marginBottom:"4px"}}>"{x.text}"</div>)}
