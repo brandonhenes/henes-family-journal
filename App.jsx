@@ -13,7 +13,7 @@ const KID_WASH = {
   Both:{bg:"linear-gradient(135deg,#fff5f7 0%,#f0ecff 100%)",border:"#e8d8ee"},
   Family:{bg:"linear-gradient(135deg,#fffcf0 0%,#fff5e0 30%,#fffaf0 100%)",border:"#f0e4c8"},
 };
-const BIRTHDAYS={Gabby:new Date("2024-07-15"),Madelyn:new Date("2026-07-01")};
+const BIRTHDAYS={Gabby:new Date("2024-07-01"),Madelyn:new Date("2026-07-01")};
 const S = "'Source Sans 3',sans-serif";
 const sbH = {apikey:KEY,Authorization:`Bearer ${KEY}`,"Content-Type":"application/json"};
 const sbPost=(p,b)=>fetch(`${SB}/rest/v1/${p}`,{method:"POST",headers:{...sbH,Prefer:"return=representation"},body:JSON.stringify(b)});
@@ -397,6 +397,8 @@ function Comments({mid,comments,onComment,toast}){
   const[text,setText]=useState("");
   const[showNames,setShowNames]=useState(false);
   const[posting,setPosting]=useState(false);
+  const[confirmDel,setConfirmDel]=useState(null);
+  const me=gN();
 
   const submit=async(author)=>{
     if(!text.trim())return;
@@ -406,6 +408,7 @@ function Comments({mid,comments,onComment,toast}){
   };
   const handlePost=()=>{const name=gN();if(name){submit(name)}else{setShowNames(true)}};
   const pickName=(name)=>{sN(name);toast(`Hi ${name}!`,"👋");submit(name)};
+  const deleteComment=async(id)=>{try{await sbDel(`comments?id=eq.${id}`);toast("Comment deleted","🗑");onComment()}catch{toast("Couldn't delete","❌")}setConfirmDel(null)};
 
   const count=comments.length;
 
@@ -414,12 +417,23 @@ function Comments({mid,comments,onComment,toast}){
       {count>0?`💬 ${count} comment${count!==1?"s":""}`:show?"Cancel":"💬 Comment"}
     </button>
     {show&&(<div style={{marginTop:"10px"}}>
-      {comments.map(c=>{const t=new Date(c.created_at);const ago=Math.floor((Date.now()-t)/60000);const timeStr=ago<1?"just now":ago<60?`${ago}m ago`:ago<1440?`${Math.floor(ago/60)}h ago`:t.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+      {comments.map(c=>{const t=new Date(c.created_at);const ago=Math.floor((Date.now()-t)/60000);const timeStr=ago<1?"just now":ago<60?`${ago}m ago`:ago<1440?`${Math.floor(ago/60)}h ago`:t.toLocaleDateString("en-US",{month:"short",day:"numeric"});const mine=me&&c.author===me;
         return(<div key={c.id} style={{display:"flex",gap:"10px",marginBottom:"10px",alignItems:"flex-start"}}>
           <div style={{width:"28px",height:"28px",borderRadius:"50%",background:A_CLR[c.author]||"#c4a8ae",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"11px",fontWeight:700,fontFamily:S,flexShrink:0}}>{c.author[0]}</div>
-          <div style={{flex:1}}>
-            <div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{fontSize:"12px",fontFamily:S,fontWeight:700,color:A_CLR[c.author]||"#6b5560"}}>{c.author}</span><span style={{fontSize:"10px",fontFamily:S,color:"#d0bfc3"}}>{timeStr}</span></div>
-            <div style={{fontSize:"14px",lineHeight:1.5,color:"#5c4a4f",marginTop:"2px"}}>{c.text}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+              <span style={{fontSize:"12px",fontFamily:S,fontWeight:700,color:A_CLR[c.author]||"#6b5560"}}>{c.author}</span>
+              <span style={{fontSize:"10px",fontFamily:S,color:"#d0bfc3"}}>{timeStr}</span>
+              {mine&&(confirmDel===c.id?(
+                <span style={{marginLeft:"auto",display:"flex",gap:"4px",alignItems:"center"}}>
+                  <button onClick={()=>deleteComment(c.id)} style={{background:"#c97b8b",color:"white",border:"none",borderRadius:"10px",padding:"2px 8px",fontSize:"10px",fontFamily:S,fontWeight:600,cursor:"pointer"}}>Delete</button>
+                  <button onClick={()=>setConfirmDel(null)} style={{background:"none",color:"#c4a8ae",border:"none",fontSize:"10px",fontFamily:S,fontWeight:600,cursor:"pointer",padding:"2px 4px"}}>Cancel</button>
+                </span>
+              ):(
+                <button onClick={()=>setConfirmDel(c.id)} title="Delete" style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",fontSize:"11px",padding:"2px 4px",opacity:0.3,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.7"} onMouseLeave={e=>e.target.style.opacity="0.3"}>🗑</button>
+              ))}
+            </div>
+            <div style={{fontSize:"14px",lineHeight:1.5,color:"#5c4a4f",marginTop:"2px",wordWrap:"break-word"}}>{c.text}</div>
           </div>
         </div>)})}
       <div style={{display:"flex",gap:"8px",alignItems:"flex-end",position:"relative"}}>
