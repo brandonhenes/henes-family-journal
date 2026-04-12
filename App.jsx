@@ -200,23 +200,34 @@ function Lightbox({data,onClose,mediaList,onNavigate,toast}){
 /* ---- #6 Media carousel for clustered moments ---- */
 function MediaCarousel({items,onImageClick}){
   const[idx,setIdx]=useState(0);
+  const touchX=useRef(null);
   const all=items.filter(m=>m.primary_media_path).map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");const isI=m.primary_media_path?.endsWith(".jpg")||m.primary_media_path?.endsWith(".jpeg")||m.primary_media_path?.endsWith(".png")||m.primary_media_path?.endsWith(".webp");return{url:u,isVideo:isV,isImage:isI,moment:m}});
   if(!all.length)return null;
   const cur=all[idx];
+  const goPrev=(e)=>{if(e)e.stopPropagation();if(idx>0)setIdx(idx-1)};
+  const goNext=(e)=>{if(e)e.stopPropagation();if(idx<all.length-1)setIdx(idx+1)};
+  const onTouchStart=e=>{touchX.current=e.touches[0].clientX};
+  const onTouchEnd=e=>{if(touchX.current===null)return;const diff=e.changedTouches[0].clientX-touchX.current;touchX.current=null;if(Math.abs(diff)>50){diff>0?goPrev():goNext()}};
+  const navBtn={position:"absolute",top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.5)",border:"none",color:"white",fontSize:"22px",width:"36px",height:"36px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)",transition:"background 0.2s",zIndex:3,fontFamily:"sans-serif",padding:0};
+
   return(<div style={{marginBottom:"14px"}}>
-    <div className="clickable-media" onClick={()=>onImageClick({url:cur.url,isVideo:cur.isVideo,moment:cur.moment})} style={{borderRadius:"18px",overflow:"hidden",position:"relative"}}>
-      {cur.isVideo?<VideoThumbnail src={cur.url}/>:<ProgressiveImage src={cur.url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}}/>}
-      {all.length>1&&<div style={{position:"absolute",top:"10px",right:"10px",background:"rgba(0,0,0,0.5)",borderRadius:"12px",padding:"2px 10px",fontSize:"11px",fontFamily:S,fontWeight:700,color:"white",backdropFilter:"blur(4px)"}}>{idx+1}/{all.length}</div>}
+    <div style={{borderRadius:"18px",overflow:"hidden",position:"relative"}} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="clickable-media" onClick={()=>onImageClick({url:cur.url,isVideo:cur.isVideo,moment:cur.moment})}>
+        {cur.isVideo?<VideoThumbnail src={cur.url}/>:<ProgressiveImage src={cur.url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}}/>}
+      </div>
+      {all.length>1&&<div style={{position:"absolute",top:"10px",right:"10px",background:"rgba(0,0,0,0.5)",borderRadius:"12px",padding:"2px 10px",fontSize:"11px",fontFamily:S,fontWeight:700,color:"white",backdropFilter:"blur(4px)",pointerEvents:"none"}}>{idx+1}/{all.length}</div>}
+      {all.length>1&&idx>0&&<button onClick={goPrev} style={{...navBtn,left:"10px"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(0,0,0,0.7)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.5)"}>‹</button>}
+      {all.length>1&&idx<all.length-1&&<button onClick={goNext} style={{...navBtn,right:"10px"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(0,0,0,0.7)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.5)"}>›</button>}
     </div>
     {all.length>1&&<div style={{display:"flex",justifyContent:"center",gap:"6px",marginTop:"10px"}}>
-      {all.map((_,i)=><button key={i} onClick={()=>setIdx(i)} style={{width:i===idx?"20px":"8px",height:"8px",borderRadius:"4px",border:"none",background:i===idx?"#c97b8b":"#ede5dc",cursor:"pointer",transition:"all 0.2s",padding:0}}/>)}
+      {all.map((_,i)=><button key={i} onClick={(e)=>{e.stopPropagation();setIdx(i)}} style={{width:i===idx?"20px":"8px",height:"8px",borderRadius:"4px",border:"none",background:i===idx?"#c97b8b":"#ede5dc",cursor:"pointer",transition:"all 0.2s",padding:0}}/>)}
     </div>}
   </div>);
 }
 
 /* ---- Main App ---- */
 export default function App(){
-  const[moments,setM]=useState([]);const[reactions,setRx]=useState([]);const[loading,setL]=useState(true);
+  const[moments,setM]=useState([]);const[reactions,setRx]=useState([]);const[comments,setCm]=useState([]);const[loading,setL]=useState(true);
   const[typeF,setTF]=useState("all");const[kidF,setKF]=useState("all");
   const[search,setSe]=useState("");const[aiMode,setAi]=useState(false);const[aiR,setAiR]=useState(null);const[aiL,setAiL]=useState(false);
   const[view,setV]=useState("timeline");const[favs,setFavs]=useState(()=>{try{return JSON.parse(sessionStorage.getItem("faves")||"[]")}catch{return[]}});
@@ -230,7 +241,8 @@ export default function App(){
 
   const fetchM=()=>fetch(`${SB}/rest/v1/moments?order=created_at.desc&limit=500`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setM(d)}).catch(console.error);
   const fetchR=()=>fetch(`${SB}/rest/v1/reactions?order=created_at.asc`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setRx(d)}).catch(console.error);
-  useEffect(()=>{Promise.all([fetchM(),fetchR()]).finally(()=>setL(false))},[]);
+  const fetchC=()=>fetch(`${SB}/rest/v1/comments?order=created_at.asc`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setCm(d)}).catch(console.error);
+  useEffect(()=>{Promise.all([fetchM(),fetchR(),fetchC()]).finally(()=>setL(false))},[]);
   const toggleFav=id=>{const n=favs.includes(id)?favs.filter(f=>f!==id):[...favs,id];setFavs(n);try{sessionStorage.setItem("faves",JSON.stringify(n))}catch{};const added=!favs.includes(id);toast(added?"Saved to favorites":"Removed from favorites",added?"⭐":"💫")};
   const doAi=useCallback(async q=>{if(!q.trim()){setAiR(null);return}setAiL(true);try{const r=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q,moments:moments.map(m=>({id:m.id,kid:m.kid,type:m.type,text:m.text,author:m.author,created_at:m.created_at}))})});const d=await r.json();setAiR(d.ids||[])}catch{setAiR(null)}setAiL(false)},[moments]);
   const handleSearch=v=>{setSe(v);if(aiMode){clearTimeout(sTimer.current);sTimer.current=setTimeout(()=>doAi(v),800)}};
@@ -245,7 +257,7 @@ export default function App(){
   const stats={total:moments.length,byKid:moments.reduce((a,m)=>({...a,[m.kid]:(a[m.kid]||0)+1}),{}),byAuthor:moments.reduce((a,m)=>({...a,[m.author]:(a[m.author]||0)+1}),{}),withMedia:moments.filter(m=>m.primary_media_path).length};
   const today=new Date();const otd=moments.filter(m=>{const d=new Date(m.created_at);return d.getMonth()===today.getMonth()&&d.getDate()===today.getDate()&&d.getFullYear()<today.getFullYear()});
   const grp=items=>{const g={};items.forEach(m=>{const k=new Date(m.created_at).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});if(!g[k])g[k]=[];g[k].push(m)});return g};
-  const grouped=grp(filtered.slice(0,visibleCount));const fmtMo=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})};const getRx=id=>reactions.filter(r=>r.moment_id===id);
+  const grouped=grp(filtered.slice(0,visibleCount));const fmtMo=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})};const getRx=id=>reactions.filter(r=>r.moment_id===id);const getCm=id=>comments.filter(c=>c.moment_id===id);
   const hasMore=visibleCount<filtered.length;
 
   // #4 Include audio in mediaList for lightbox swipe
@@ -346,7 +358,7 @@ export default function App(){
             {Object.entries(grouped).map(([date,items])=>{
               const clusters=clusterMoments(items);
               return(<div key={date} style={{marginBottom:"36px"}}><div className="sticky-date"><div style={{display:"flex",alignItems:"center"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#dbb0bb)",border:"3px solid #faf8f5",flexShrink:0,zIndex:1,boxShadow:"0 2px 6px rgba(201,123,139,0.2)"}}/><div style={{fontSize:"12px",letterSpacing:"2.5px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginLeft:"14px"}}>{date}</div></div></div>
-              <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{clusters.map((cl,idx)=>{const m=cl.primary;return(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} extraMoments={cl.extra} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} onImageClick={openLightbox} toast={toast} onEdit={updateMoment}/></div>)})}</div></div>)})}
+              <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{clusters.map((cl,idx)=>{const m=cl.primary;return(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} extraMoments={cl.extra} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} comments={getCm(m.id)} onComment={fetchC} onImageClick={openLightbox} toast={toast} onEdit={updateMoment}/></div>)})}</div></div>)})}
           </div>)}
         {view==="timeline"&&hasMore&&<div ref={sentinelRef} style={{display:"flex",justifyContent:"center",padding:"24px"}}><div className="loading-dots" style={{display:"flex",gap:"6px",alignItems:"center"}}><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#d0bfc3"}}>Loading more</span>{[0,1,2].map(i=><div key={i} style={{width:"6px",height:"6px",borderRadius:"50%",background:"#d0bfc3",animation:`dotPulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div></div>}
         </div>
@@ -379,8 +391,48 @@ function VoicePreview({onClick}){
   </div>);
 }
 
+/* ---- Comments ---- */
+function Comments({mid,comments,onComment,toast}){
+  const[show,setShow]=useState(false);
+  const[text,setText]=useState("");
+  const[showNames,setShowNames]=useState(false);
+  const[posting,setPosting]=useState(false);
+
+  const submit=async(author)=>{
+    if(!text.trim())return;
+    setPosting(true);setShowNames(false);
+    try{await sbPost("comments",{moment_id:mid,author,text:text.trim()});setText("");toast("Comment added","💬");onComment()}catch{toast("Couldn't post","❌")}
+    setPosting(false);
+  };
+  const handlePost=()=>{const name=gN();if(name){submit(name)}else{setShowNames(true)}};
+  const pickName=(name)=>{sN(name);toast(`Hi ${name}!`,"👋");submit(name)};
+
+  const count=comments.length;
+
+  return(<div style={{marginTop:"12px",position:"relative",zIndex:3}}>
+    <button onClick={()=>setShow(!show)} style={{background:"none",border:"none",cursor:"pointer",fontSize:"12px",fontFamily:S,fontWeight:600,color:"#c4a8ae",padding:"4px 0",transition:"color 0.2s"}} onMouseEnter={e=>e.target.style.color="#c97b8b"} onMouseLeave={e=>e.target.style.color="#c4a8ae"}>
+      {count>0?`💬 ${count} comment${count!==1?"s":""}`:show?"Cancel":"💬 Comment"}
+    </button>
+    {show&&(<div style={{marginTop:"10px"}}>
+      {comments.map(c=>{const t=new Date(c.created_at);const ago=Math.floor((Date.now()-t)/60000);const timeStr=ago<1?"just now":ago<60?`${ago}m ago`:ago<1440?`${Math.floor(ago/60)}h ago`:t.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+        return(<div key={c.id} style={{display:"flex",gap:"10px",marginBottom:"10px",alignItems:"flex-start"}}>
+          <div style={{width:"28px",height:"28px",borderRadius:"50%",background:A_CLR[c.author]||"#c4a8ae",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"11px",fontWeight:700,fontFamily:S,flexShrink:0}}>{c.author[0]}</div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{fontSize:"12px",fontFamily:S,fontWeight:700,color:A_CLR[c.author]||"#6b5560"}}>{c.author}</span><span style={{fontSize:"10px",fontFamily:S,color:"#d0bfc3"}}>{timeStr}</span></div>
+            <div style={{fontSize:"14px",lineHeight:1.5,color:"#5c4a4f",marginTop:"2px"}}>{c.text}</div>
+          </div>
+        </div>)})}
+      <div style={{display:"flex",gap:"8px",alignItems:"flex-end",position:"relative"}}>
+        <input type="text" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&text.trim())handlePost()}} placeholder="Write a comment..." disabled={posting} style={{flex:1,padding:"10px 14px",border:"2px solid #ede5dc",borderRadius:"20px",fontSize:"14px",fontFamily:S,background:"white",outline:"none",color:"#5c4a4f",transition:"border-color 0.2s"}} onFocus={e=>e.target.style.borderColor="#c97b8b"} onBlur={e=>e.target.style.borderColor="#ede5dc"}/>
+        <button onClick={handlePost} disabled={!text.trim()||posting} style={{padding:"10px 16px",borderRadius:"20px",border:"none",background:text.trim()?"#c97b8b":"#ede5dc",color:text.trim()?"white":"#c4a8ae",fontSize:"13px",fontFamily:S,fontWeight:600,cursor:text.trim()?"pointer":"default",transition:"background 0.2s",flexShrink:0}}>Post</button>
+        {showNames&&<div className="popup-f" style={{flexDirection:"column",gap:0,padding:"6px 4px",minWidth:"120px",bottom:"48px",left:"auto",right:0,transform:"none"}}><div style={{fontSize:"10px",fontFamily:S,fontWeight:700,color:"#c4a8ae",letterSpacing:"1px",textTransform:"uppercase",padding:"4px 10px 6px",textAlign:"center"}}>Who's this?</div>{FAMILY_NAMES.map(n=><button key={n} className="name-opt" onClick={()=>pickName(n)} style={{color:A_CLR[n]||"#6b5560"}}>{n}</button>)}</div>}
+      </div>
+    </div>)}
+  </div>);
+}
+
 /* ---- Card with inline edit + multi-photo carousel ---- */
-function Card({m,extraMoments=[],faved,onFav,reactions,onReact,onImageClick,toast,onEdit}){
+function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onComment,onImageClick,toast,onEdit}){
   const time=new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   const url=m.primary_media_path?`${MEDIA}/${m.primary_media_path}`:null;
   const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");
@@ -430,5 +482,6 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,onImageClick,toas
     )}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px",position:"relative",zIndex:3}}><span style={{fontSize:"13px",fontFamily:S,fontWeight:700,color:A_CLR[m.author]||"#888"}}>{m.author}</span><div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>{Array.isArray(m.tags)&&m.tags.slice(0,3).map((t,i)=><span key={i} className="tag-f" style={{border:`1px solid ${wash.border}`}}>{t}</span>)}</div></div>
     <Reactions mid={m.id} rx={reactions} onR={onReact} toast={toast}/>
+    <Comments mid={m.id} comments={comments} onComment={onComment} toast={toast}/>
   </div>);
 }
