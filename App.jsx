@@ -13,7 +13,7 @@ const KID_WASH = {
   Both:{bg:"linear-gradient(135deg,#fff5f7 0%,#f0ecff 100%)",border:"#e8d8ee"},
   Family:{bg:"linear-gradient(135deg,#fffcf0 0%,#fff5e0 30%,#fffaf0 100%)",border:"#f0e4c8"},
 };
-const BIRTHDAYS={Gabby:new Date("2024-07-01"),Madelyn:new Date("2026-07-01")};
+const BIRTHDAYS={Gabby:new Date("2024-07-15"),Madelyn:new Date("2026-07-01")};
 const S = "'Source Sans 3',sans-serif";
 const sbH = {apikey:KEY,Authorization:`Bearer ${KEY}`,"Content-Type":"application/json"};
 const sbPost=(p,b)=>fetch(`${SB}/rest/v1/${p}`,{method:"POST",headers:{...sbH,Prefer:"return=representation"},body:JSON.stringify(b)});
@@ -426,11 +426,11 @@ function Comments({mid,comments,onComment,toast}){
               <span style={{fontSize:"10px",fontFamily:S,color:"#d0bfc3"}}>{timeStr}</span>
               {mine&&(confirmDel===c.id?(
                 <span style={{marginLeft:"auto",display:"flex",gap:"4px",alignItems:"center"}}>
-                  <button onClick={()=>deleteComment(c.id)} style={{background:"#c97b8b",color:"white",border:"none",borderRadius:"10px",padding:"2px 8px",fontSize:"10px",fontFamily:S,fontWeight:600,cursor:"pointer"}}>Delete</button>
-                  <button onClick={()=>setConfirmDel(null)} style={{background:"none",color:"#c4a8ae",border:"none",fontSize:"10px",fontFamily:S,fontWeight:600,cursor:"pointer",padding:"2px 4px"}}>Cancel</button>
+                  <button onClick={()=>deleteComment(c.id)} style={{background:"#c97b8b",color:"white",border:"none",borderRadius:"10px",padding:"3px 10px",fontSize:"11px",fontFamily:S,fontWeight:600,cursor:"pointer"}}>Delete</button>
+                  <button onClick={()=>setConfirmDel(null)} style={{background:"none",color:"#c4a8ae",border:"none",fontSize:"11px",fontFamily:S,fontWeight:600,cursor:"pointer",padding:"2px 4px"}}>Cancel</button>
                 </span>
               ):(
-                <button onClick={()=>setConfirmDel(c.id)} title="Delete" style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",fontSize:"11px",padding:"2px 4px",opacity:0.3,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.7"} onMouseLeave={e=>e.target.style.opacity="0.3"}>🗑</button>
+                <button onClick={()=>setConfirmDel(c.id)} title="Delete comment" style={{marginLeft:"auto",background:"rgba(201,123,139,0.1)",border:"1px solid rgba(201,123,139,0.3)",borderRadius:"10px",cursor:"pointer",fontSize:"11px",fontFamily:S,fontWeight:600,color:"#c97b8b",padding:"2px 10px",transition:"all 0.2s"}} onMouseEnter={e=>{e.target.style.background="#c97b8b";e.target.style.color="white"}} onMouseLeave={e=>{e.target.style.background="rgba(201,123,139,0.1)";e.target.style.color="#c97b8b"}}>Delete</button>
               ))}
             </div>
             <div style={{fontSize:"14px",lineHeight:1.5,color:"#5c4a4f",marginTop:"2px",wordWrap:"break-word"}}>{c.text}</div>
