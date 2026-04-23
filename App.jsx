@@ -39,10 +39,13 @@ const downloadMedia=async(url,toast)=>{
 const ageAt=(kid,date)=>{const b=BIRTHDAYS[kid];if(!b)return null;const d=new Date(date);const mo=((d.getFullYear()-b.getFullYear())*12)+(d.getMonth()-b.getMonth());if(mo<0)return null;if(mo<24)return `${mo}mo`;return `${Math.floor(mo/12)}y ${mo%12}mo`};
 
 // Group moments within 3min of each other from same author into clusters
+// Primary = oldest (first sent), extras appended in chronological order
 const clusterMoments=(items)=>{if(!items.length)return[];const clusters=[];let cur={primary:items[0],extra:[]};
   for(let i=1;i<items.length;i++){const m=items[i];const prev=cur.extra.length?cur.extra[cur.extra.length-1]:cur.primary;const gap=Math.abs(new Date(prev.created_at)-new Date(m.created_at));const sameAuthor=m.author===cur.primary.author;
     if(sameAuthor&&gap<180000&&(m.primary_media_path||cur.primary.primary_media_path)){cur.extra.push(m)}else{clusters.push(cur);cur={primary:m,extra:[]}}}
-  clusters.push(cur);return clusters};
+  clusters.push(cur);
+  // Reorder each cluster so oldest is primary (first sent = first shown)
+  return clusters.map(cl=>{const all=[cl.primary,...cl.extra].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));return{primary:all[0],extra:all.slice(1)}});};
 
 /* ---- Toast system ---- */
 let toastId=0;
