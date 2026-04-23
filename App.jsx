@@ -198,24 +198,47 @@ function Lightbox({data,onClose,mediaList,onNavigate,toast}){
 }
 
 /* ---- #6 Media carousel for clustered moments ---- */
-function MediaCarousel({items,onImageClick}){
+function MediaCarousel({items,onImageClick,onEdit,toast}){
   const[idx,setIdx]=useState(0);
+  const[editing,setEditing]=useState(false);
+  const[editText,setEditText]=useState("");
   const touchX=useRef(null);
   const all=items.filter(m=>m.primary_media_path).map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");const isI=m.primary_media_path?.endsWith(".jpg")||m.primary_media_path?.endsWith(".jpeg")||m.primary_media_path?.endsWith(".png")||m.primary_media_path?.endsWith(".webp");return{url:u,isVideo:isV,isImage:isI,moment:m}});
   if(!all.length)return null;
   const cur=all[idx];
-  const goPrev=(e)=>{if(e)e.stopPropagation();if(idx>0)setIdx(idx-1)};
-  const goNext=(e)=>{if(e)e.stopPropagation();if(idx<all.length-1)setIdx(idx+1)};
+  const curMoment=cur.moment;
+  const curHide=curMoment.text.startsWith("[")&&curMoment.text.endsWith("]");
+  const goPrev=(e)=>{if(e)e.stopPropagation();if(editing)return;if(idx>0)setIdx(idx-1)};
+  const goNext=(e)=>{if(e)e.stopPropagation();if(editing)return;if(idx<all.length-1)setIdx(idx+1)};
   const onTouchStart=e=>{touchX.current=e.touches[0].clientX};
-  const onTouchEnd=e=>{if(touchX.current===null)return;const diff=e.changedTouches[0].clientX-touchX.current;touchX.current=null;if(Math.abs(diff)>50){diff>0?goPrev():goNext()}};
+  const onTouchEnd=e=>{if(touchX.current===null||editing)return;const diff=e.changedTouches[0].clientX-touchX.current;touchX.current=null;if(Math.abs(diff)>50){diff>0?goPrev():goNext()}};
   const navBtn={position:"absolute",top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.5)",border:"none",color:"white",fontSize:"22px",width:"36px",height:"36px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)",transition:"background 0.2s",zIndex:3,fontFamily:"sans-serif",padding:0};
 
+  const startEdit=()=>{setEditText(curMoment.text);setEditing(true)};
+  const saveEdit=()=>{if(editText.trim()&&editText!==curMoment.text){onEdit(curMoment.id,editText.trim())}setEditing(false)};
+  const cancelEdit=()=>{setEditText("");setEditing(false)};
+
   return(<div style={{marginBottom:"14px"}}>
+    {/* Per-photo caption */}
+    {!curHide&&(editing?(
+      <div style={{marginBottom:"12px"}}>
+        <textarea className="edit-area" value={editText} onChange={e=>setEditText(e.target.value)} autoFocus/>
+        <div style={{display:"flex",gap:"8px",marginTop:"8px"}}>
+          <button onClick={saveEdit} style={{padding:"6px 16px",borderRadius:"16px",border:"none",background:"#c97b8b",color:"white",fontSize:"13px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:600,cursor:"pointer"}}>Save</button>
+          <button onClick={cancelEdit} style={{padding:"6px 16px",borderRadius:"16px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"13px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:600,cursor:"pointer"}}>Cancel</button>
+        </div>
+      </div>
+    ):(
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"8px",marginBottom:"12px"}}>
+        <div style={{fontSize:"17px",lineHeight:1.6,color:"#4a3a3f",flex:1}}>{`"${curMoment.text}"`}</div>
+        {onEdit&&<button onClick={startEdit} title="Edit this caption" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.3,transition:"opacity 0.2s",flexShrink:0}} onMouseEnter={e=>e.target.style.opacity="0.7"} onMouseLeave={e=>e.target.style.opacity="0.3"}>✏️</button>}
+      </div>
+    ))}
     <div style={{borderRadius:"18px",overflow:"hidden",position:"relative"}} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <div className="clickable-media" onClick={()=>onImageClick({url:cur.url,isVideo:cur.isVideo,moment:cur.moment})}>
         {cur.isVideo?<VideoThumbnail src={cur.url}/>:<ProgressiveImage src={cur.url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}}/>}
       </div>
-      {all.length>1&&<div style={{position:"absolute",top:"10px",right:"10px",background:"rgba(0,0,0,0.5)",borderRadius:"12px",padding:"2px 10px",fontSize:"11px",fontFamily:S,fontWeight:700,color:"white",backdropFilter:"blur(4px)",pointerEvents:"none"}}>{idx+1}/{all.length}</div>}
+      {all.length>1&&<div style={{position:"absolute",top:"10px",right:"10px",background:"rgba(0,0,0,0.5)",borderRadius:"12px",padding:"2px 10px",fontSize:"11px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,color:"white",backdropFilter:"blur(4px)",pointerEvents:"none"}}>{idx+1}/{all.length}</div>}
       {all.length>1&&idx>0&&<button onClick={goPrev} style={{...navBtn,left:"10px"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(0,0,0,0.7)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.5)"}>‹</button>}
       {all.length>1&&idx<all.length-1&&<button onClick={goNext} style={{...navBtn,right:"10px"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(0,0,0,0.7)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.5)"}>›</button>}
     </div>
@@ -469,11 +492,11 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onCommen
       <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"22px"}}>{EMOJI[m.type]||"✨"}</span><div><span style={{fontSize:"15px",fontFamily:S,fontWeight:700,color:"#6b5560"}}>{m.kid}</span><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#c4a8ae",marginLeft:"6px"}}>{m.type}</span></div></div>
       <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
         {!editing&&url&&<button onClick={()=>downloadMedia(url,toast)} title="Download" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>💾</button>}
-        {!editing&&<button onClick={()=>setEditing(true)} title="Edit" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>✏️</button>}
+        {!editing&&!hasCarousel&&<button onClick={()=>setEditing(true)} title="Edit" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>✏️</button>}
         <ShareBtn m={m} toast={toast}/><button onClick={onFav} title={faved?"Unfavorite":"Favorite"} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span>
       </div>
     </div>
-    {!hide&&(editing?(
+    {!hide&&!hasCarousel&&(editing?(
       <div style={{marginBottom:"14px",position:"relative",zIndex:3}}>
         <textarea className="edit-area" value={editText} onChange={e=>setEditText(e.target.value)} autoFocus/>
         <div style={{display:"flex",gap:"8px",marginTop:"8px"}}>
@@ -484,7 +507,7 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onCommen
     ):(
       <div style={{fontSize:"17px",lineHeight:1.6,color:"#4a3a3f",marginBottom:"14px",fontStyle:m.type==="Quote"?"italic":"normal",position:"relative",zIndex:3}}>{m.type==="Quote"?<>&#8220;{m.text}&#8221;</>:`"${m.text}"`}</div>
     ))}
-    {hasCarousel?<MediaCarousel items={allMedia} onImageClick={onImageClick}/>:(<>
+    {hasCarousel?<MediaCarousel items={allMedia} onImageClick={onImageClick} onEdit={onEdit} toast={toast}/>:(<>
       {isV&&url&&<div style={{marginBottom:"14px"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:true,moment:m})}><VideoThumbnail src={url}/></div>}
       {isI&&url&&<div style={{marginBottom:"14px",overflow:"hidden"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,moment:m})}><ProgressiveImage src={url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}} /></div>}
     </>)}
