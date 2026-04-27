@@ -13,7 +13,7 @@ const KID_WASH = {
   Both:{bg:"linear-gradient(135deg,#fff5f7 0%,#f0ecff 100%)",border:"#e8d8ee"},
   Family:{bg:"linear-gradient(135deg,#fffcf0 0%,#fff5e0 30%,#fffaf0 100%)",border:"#f0e4c8"},
 };
-const BIRTHDAYS={Gabby:new Date("2024-07-15"),Madelyn:new Date("2026-07-01")};
+const BIRTHDAYS={Gabby:new Date("2024-07-01"),Madelyn:new Date("2026-07-01")};
 const S = "'Source Sans 3',sans-serif";
 const sbH = {apikey:KEY,Authorization:`Bearer ${KEY}`,"Content-Type":"application/json"};
 const sbPost=(p,b)=>fetch(`${SB}/rest/v1/${p}`,{method:"POST",headers:{...sbH,Prefer:"return=representation"},body:JSON.stringify(b)});
@@ -38,14 +38,75 @@ const downloadMedia=async(url,toast)=>{
 /* ---- Helpers ---- */
 const ageAt=(kid,date)=>{const b=BIRTHDAYS[kid];if(!b)return null;const d=new Date(date);const mo=((d.getFullYear()-b.getFullYear())*12)+(d.getMonth()-b.getMonth());if(mo<0)return null;if(mo<24)return `${mo}mo`;return `${Math.floor(mo/12)}y ${mo%12}mo`};
 
-// Group moments within 3min of each other from same author into clusters
-// Primary = oldest (first sent), extras appended in chronological order
-const clusterMoments=(items)=>{if(!items.length)return[];const clusters=[];let cur={primary:items[0],extra:[]};
-  for(let i=1;i<items.length;i++){const m=items[i];const prev=cur.extra.length?cur.extra[cur.extra.length-1]:cur.primary;const gap=Math.abs(new Date(prev.created_at)-new Date(m.created_at));const sameAuthor=m.author===cur.primary.author;
-    if(sameAuthor&&gap<180000&&(m.primary_media_path||cur.primary.primary_media_path)){cur.extra.push(m)}else{clusters.push(cur);cur={primary:m,extra:[]}}}
-  clusters.push(cur);
-  // Reorder each cluster so oldest is primary (first sent = first shown)
-  return clusters.map(cl=>{const all=[cl.primary,...cl.extra].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));return{primary:all[0],extra:all.slice(1)}});};
+// Manual photo groups + soft suggestions (no auto-bunching)
+const isVideoPath=p=>p?.endsWith(".mp4")||p?.endsWith(".mov");
+const isAudioPath=p=>p?.endsWith(".ogg")||p?.endsWith(".mp3")||p?.endsWith(".oga");
+const isImagePath=p=>p?.endsWith(".jpg")||p?.endsWith(".jpeg")||p?.endsWith(".png")||p?.endsWith(".webp");
+const isMediaMoment=m=>!!m?.primary_media_path&&(isImagePath(m.primary_media_path)||isVideoPath(m.primary_media_path));
+const mTime=m=>new Date(m.created_at).getTime();
+const sortAsc=(a,b)=>mTime(a)-mTime(b);
+const sortDesc=(a,b)=>mTime(b)-mTime(a);
+const dateLabelFor=ts=>new Date(ts).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
+const fmtRange=ms=>{
+  if(!ms?.length)return "";
+  const a=[...ms].sort(sortAsc);
+  const first=new Date(a[0].created_at);
+  const last=new Date(a[a.length-1].created_at);
+  const f=first.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  const l=last.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  return f===l?f:`${f} - ${l}`;
+};
+const defaultGroupTitle=ms=>{
+  if(!ms?.length)return "Photo group";
+  const sorted=[...ms].sort(sortAsc);
+  const kid=sorted.every(m=>m.kid===sorted[0].kid)?sorted[0].kid:"Family";
+  const d=new Date(sorted[0].created_at).toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  return `${kid} photos · ${d}`;
+};
+const makeSuggestionKey=ms=>[...ms].map(m=>m.id).sort().join("|");
+const groupByDate=entities=>{
+  const g={};
+  entities.forEach(e=>{const k=dateLabelFor(e.timestamp);if(!g[k])g[k]=[];g[k].push(e)});
+  return g;
+};
+
+const generateSoftSuggestions=(items,dismissedKeys=new Set())=>{
+  const media=[...items].filter(isMediaMoment).sort(sortAsc);
+  const out=[];let cur=[];
+  const flush=()=>{if(cur.length>=2){const key=makeSuggestionKey(cur);if(!dismissedKeys.has(key))out.push({key,moments:[...cur].sort(sortAsc),timestamp:mTime(cur[0])})}cur=[]};
+  media.forEach(m=>{
+    if(!cur.length){cur=[m];return}
+    const prev=cur[cur.length-1];
+    const sameAuthor=m.author===cur[0].author;
+    const sameKid=m.kid===cur[0].kid;
+    const sameDay=new Date(m.created_at).toDateString()===new Date(cur[0].created_at).toDateString();
+    const gap=mTime(m)-mTime(prev);
+    if(sameAuthor&&sameKid&&sameDay&&gap>=0&&gap<180000){cur.push(m)}else{flush();cur=[m]}
+  });
+  flush();
+  return out;
+};
+
+const buildTimelineEntities=({moments,filtered,momentGroups,groupItems,dismissedKeys})=>{
+  const allById=new Map(moments.map(m=>[m.id,m]));
+  const filteredIds=new Set(filtered.map(m=>m.id));
+  const groupedMomentIds=new Set(groupItems.map(i=>i.moment_id));
+  const groupEntities=momentGroups.map(g=>{
+    const items=groupItems.filter(i=>i.group_id===g.id).sort((a,b)=>(a.position??0)-(b.position??0));
+    const ms=items.map(i=>allById.get(i.moment_id)).filter(Boolean);
+    if(!ms.length)return null;
+    if(!ms.some(m=>filteredIds.has(m.id)))return null;
+    const cover=ms.find(m=>m.id===g.cover_moment_id)||ms[0];
+    const first=[...ms].sort(sortAsc)[0];
+    return{kind:"group",id:`group-${g.id}`,group:g,moments:ms,cover,timestamp:mTime(first)};
+  }).filter(Boolean);
+
+  const ungrouped=filtered.filter(m=>!groupedMomentIds.has(m.id));
+  const suggestions=generateSoftSuggestions(ungrouped,dismissedKeys).map(s=>({kind:"suggestion",id:`suggestion-${s.key}`,suggestion:s,timestamp:s.timestamp}));
+  const momentEntities=ungrouped.map(m=>({kind:"moment",id:m.id,moment:m,timestamp:mTime(m)}));
+
+  return[...groupEntities,...momentEntities,...suggestions].sort((a,b)=>b.timestamp-a.timestamp);
+};
 
 /* ---- Toast system ---- */
 let toastId=0;
@@ -251,9 +312,189 @@ function MediaCarousel({items,onImageClick,onEdit,toast}){
   </div>);
 }
 
+/* ---- Manual group editor modal ---- */
+function GroupEditModal({mode="edit",group=null,initialMomentIds=[],initialTitle="",moments=[],availableMoments=[],onClose,onSave,onDelete,onCaptionEdit,toast}){
+  const byId=new Map(moments.map(m=>[m.id,m]));
+  const initialIds=initialMomentIds.filter(id=>byId.has(id));
+  const[title,setTitle]=useState(initialTitle||group?.title||defaultGroupTitle(initialIds.map(id=>byId.get(id))));
+  const[order,setOrder]=useState(initialIds);
+  const[coverId,setCoverId]=useState(group?.cover_moment_id||initialIds[0]||null);
+  const[dragId,setDragId]=useState(null);
+  const[showAdd,setShowAdd]=useState(false);
+  const[addIds,setAddIds]=useState([]);
+  const ordered=order.map(id=>byId.get(id)).filter(Boolean);
+  const cover=ordered.find(m=>m.id===coverId)||ordered[0]||null;
+  const unused=availableMoments.filter(m=>isMediaMoment(m)&&!order.includes(m.id)).sort(sortDesc);
+
+  const move=(id,dir)=>setOrder(prev=>{const i=prev.indexOf(id);const j=i+dir;if(i<0||j<0||j>=prev.length)return prev;const n=[...prev];[n[i],n[j]]=[n[j],n[i]];return n});
+  const remove=id=>setOrder(prev=>{const n=prev.filter(x=>x!==id);if(coverId===id)setCoverId(n[0]||null);return n});
+  const dropOn=targetId=>{if(!dragId||dragId===targetId)return;setOrder(prev=>{const n=prev.filter(id=>id!==dragId);const idx=n.indexOf(targetId);n.splice(idx,0,dragId);return n});setDragId(null)};
+  const addSelected=()=>{setOrder(prev=>[...prev,...addIds.filter(id=>!prev.includes(id))]);if(!coverId&&addIds[0])setCoverId(addIds[0]);setAddIds([]);setShowAdd(false)};
+  const editCaption=m=>{const next=window.prompt("Edit caption",m.text);if(next&&next.trim()&&next.trim()!==m.text)onCaptionEdit(m.id,next.trim())};
+  const save=()=>{if(order.length<2){toast("Choose at least 2 photos for a group","📚");return}onSave({mode,group,title:title.trim()||defaultGroupTitle(ordered),coverId:coverId||order[0],momentIds:order})};
+
+  return(<div style={{position:"fixed",inset:0,background:"rgba(92,74,79,0.55)",zIndex:1600,display:"flex",alignItems:"center",justifyContent:"center",padding:"18px",backdropFilter:"blur(6px)"}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#fffdfb",borderRadius:"26px",width:"min(680px,100%)",maxHeight:"88vh",overflow:"auto",boxShadow:"0 18px 60px rgba(70,50,55,0.22)",border:"1.5px solid #f0e5e8"}}>
+      <div style={{position:"sticky",top:0,background:"rgba(255,253,251,0.96)",backdropFilter:"blur(8px)",zIndex:2,padding:"22px 24px 14px",borderBottom:"1px solid #f5ede8",borderRadius:"26px 26px 0 0"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px"}}>
+          <div>
+            <div style={{fontSize:"12px",letterSpacing:"2px",textTransform:"uppercase",fontFamily:S,fontWeight:800,color:"#c97b8b"}}>{mode==="create"?"Create Photo Group":"Edit Photo Group"}</div>
+            <div style={{fontSize:"13px",fontFamily:S,fontWeight:600,color:"#c4a8ae",marginTop:"4px"}}>{ordered[0]?.kid||"Family"} · {ordered[0]?.author||gN()||"Family"} · {ordered.length} photos {ordered.length?`· ${new Date(ordered[0].created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}`:""}</div>
+          </div>
+          <button onClick={onClose} style={{width:"38px",height:"38px",borderRadius:"50%",border:"none",background:"#f8f0f2",color:"#9b8a78",fontSize:"18px",cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{marginTop:"16px"}}>
+          <label style={{display:"block",fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontFamily:S,fontWeight:800,color:"#c4a8ae",marginBottom:"6px"}}>Title</label>
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Block tower night" style={{width:"100%",padding:"13px 16px",border:"2px solid #ede5dc",borderRadius:"18px",fontSize:"16px",fontFamily:S,color:"#4a3a3f",outline:"none",background:"white"}}/>
+        </div>
+      </div>
+
+      <div style={{padding:"20px 24px 24px"}}>
+        {cover&&<div style={{display:"flex",alignItems:"center",gap:"12px",padding:"12px",background:"#fff8f6",border:"1.5px solid #f0e5e8",borderRadius:"18px",marginBottom:"16px"}}>
+          <div style={{width:"54px",height:"54px",borderRadius:"14px",overflow:"hidden",flexShrink:0}}>
+            {isVideoPath(cover.primary_media_path)?<VideoThumbnail src={`${MEDIA}/${cover.primary_media_path}`} style={{width:"100%",height:"100%"}}/>:<ProgressiveImage src={`${MEDIA}/${cover.primary_media_path}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:"12px",fontFamily:S,fontWeight:800,color:"#c97b8b"}}>Cover photo</div>
+            <div style={{fontSize:"14px",fontFamily:S,fontWeight:600,color:"#6b5560",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cover.text?.startsWith("[")?"Untitled photo":cover.text}</div>
+          </div>
+        </div>}
+
+        <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontFamily:S,fontWeight:800,color:"#c4a8ae",marginBottom:"10px"}}>Photos</div>
+        <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+          {ordered.map((m,i)=>{const isCover=(coverId||ordered[0]?.id)===m.id;return(
+            <div key={m.id} draggable onDragStart={()=>setDragId(m.id)} onDragOver={e=>e.preventDefault()} onDrop={()=>dropOn(m.id)} onDragEnd={()=>setDragId(null)} style={{display:"grid",gridTemplateColumns:"34px 52px 1fr",gap:"10px",alignItems:"center",padding:"10px",borderRadius:"18px",background:dragId===m.id?"#fff5f7":"white",border:`1.5px solid ${isCover?"#c97b8b":"#f0e8e4"}`}}>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                <button title="Drag to reorder" style={{border:"none",background:"transparent",cursor:"grab",fontSize:"18px",color:"#c4a8ae",lineHeight:1}}>☰</button>
+                <div style={{display:"flex",gap:"2px"}}>
+                  <button onClick={()=>move(m.id,-1)} disabled={i===0} style={{border:"none",background:"#f8f0f2",color:i===0?"#ddd":"#9b8a78",borderRadius:"8px",width:"18px",height:"18px",fontSize:"10px",cursor:i===0?"default":"pointer"}}>↑</button>
+                  <button onClick={()=>move(m.id,1)} disabled={i===ordered.length-1} style={{border:"none",background:"#f8f0f2",color:i===ordered.length-1?"#ddd":"#9b8a78",borderRadius:"8px",width:"18px",height:"18px",fontSize:"10px",cursor:i===ordered.length-1?"default":"pointer"}}>↓</button>
+                </div>
+              </div>
+              <div style={{width:"52px",height:"52px",borderRadius:"14px",overflow:"hidden",background:"#f5eff0"}}>
+                {isVideoPath(m.primary_media_path)?<VideoThumbnail src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%"}}/>:<ProgressiveImage src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+              </div>
+              <div style={{minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"5px"}}>
+                  <span style={{fontSize:"12px",fontFamily:S,fontWeight:800,color:"#9b8a78"}}>{i+1}</span>
+                  {isCover&&<span style={{fontSize:"10px",fontFamily:S,fontWeight:800,color:"white",background:"#c97b8b",borderRadius:"12px",padding:"2px 8px"}}>Cover</span>}
+                  <span style={{marginLeft:"auto",fontSize:"11px",fontFamily:S,fontWeight:700,color:"#d0bfc3"}}>{new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</span>
+                </div>
+                <div style={{fontSize:"14px",lineHeight:1.35,color:"#4a3a3f",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.text?.startsWith("[")?"Untitled photo":m.text}</div>
+                <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginTop:"8px"}}>
+                  {!isCover&&<button onClick={()=>setCoverId(m.id)} style={{border:"none",background:"transparent",color:"#c97b8b",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Set cover</button>}
+                  <button onClick={()=>editCaption(m)} style={{border:"none",background:"transparent",color:"#9b8a78",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Edit caption</button>
+                  <button onClick={()=>remove(m.id)} style={{border:"none",background:"transparent",color:"#c97b8b",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Remove</button>
+                </div>
+              </div>
+            </div>
+          )})}
+        </div>
+
+        <div style={{marginTop:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}}>
+          <button onClick={()=>setShowAdd(!showAdd)} style={{padding:"9px 16px",borderRadius:"18px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"13px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>{showAdd?"Close add photos":"Add more photos"}</button>
+          {mode==="edit"&&<button onClick={()=>onDelete(group)} style={{padding:"9px 16px",borderRadius:"18px",border:"1.5px solid rgba(201,123,139,0.25)",background:"#fff8f6",color:"#c97b8b",fontSize:"13px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Ungroup all</button>}
+        </div>
+
+        {showAdd&&<div style={{marginTop:"14px",padding:"14px",borderRadius:"18px",background:"#fef8f5",border:"1.5px solid #f0e8e4"}}>
+          <div style={{fontSize:"12px",fontFamily:S,fontWeight:800,color:"#9b8a78",marginBottom:"10px"}}>{unused.length?`Add photos to this group`:"No available ungrouped photos"}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(86px,1fr))",gap:"8px",maxHeight:"240px",overflow:"auto"}}>
+            {unused.map(m=>{const on=addIds.includes(m.id);return(
+              <button key={m.id} onClick={()=>setAddIds(ids=>on?ids.filter(id=>id!==m.id):[...ids,m.id])} style={{border:`2px solid ${on?"#c97b8b":"transparent"}`,borderRadius:"14px",padding:0,overflow:"hidden",background:"white",height:"86px",position:"relative",cursor:"pointer"}}>
+                {isVideoPath(m.primary_media_path)?<VideoThumbnail src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%"}}/>:<ProgressiveImage src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                {on&&<span style={{position:"absolute",top:"6px",right:"6px",width:"22px",height:"22px",borderRadius:"50%",background:"#c97b8b",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontWeight:800}}>✓</span>}
+              </button>
+            )})}
+          </div>
+          {addIds.length>0&&<button onClick={addSelected} style={{marginTop:"12px",width:"100%",padding:"10px 16px",borderRadius:"18px",border:"none",background:"#c97b8b",color:"white",fontSize:"13px",fontFamily:S,fontWeight:800,cursor:"pointer"}}>Add {addIds.length} selected</button>}
+        </div>}
+
+        <div style={{position:"sticky",bottom:"0",background:"linear-gradient(to top,#fffdfb 75%,rgba(255,253,251,0))",paddingTop:"22px",marginTop:"18px",display:"flex",gap:"10px",justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{padding:"11px 18px",borderRadius:"20px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"14px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Cancel</button>
+          <button onClick={save} style={{padding:"11px 20px",borderRadius:"20px",border:"none",background:"#c97b8b",color:"white",fontSize:"14px",fontFamily:S,fontWeight:800,cursor:"pointer",boxShadow:"0 5px 16px rgba(201,123,139,0.22)"}}>{mode==="create"?"Create group":"Save order"}</button>
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ---- Saved manual group card ---- */
+function GroupCard({group,moments,onImageClick,onEditGroup,onEditCaption,toast}){
+  const ordered=[...moments].sort((a,b)=>(a.__position??0)-(b.__position??0));
+  const cover=ordered.find(m=>m.id===group.cover_moment_id)||ordered[0];
+  const wash=KID_WASH[cover?.kid]||KID_WASH.Family;
+  const title=group.title||defaultGroupTitle(ordered);
+  return(<div className="petal-card" style={{background:wash.bg,border:`1.5px solid ${wash.border}`}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",marginBottom:"12px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",minWidth:0}}>
+        <span style={{fontSize:"22px"}}>📚</span>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:"15px",fontFamily:S,fontWeight:800,color:"#6b5560",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cover?.kid||"Family"} Photo Group</div>
+          <div style={{fontSize:"12px",fontFamily:S,fontWeight:700,color:"#c4a8ae"}}>{ordered.length} photos · {fmtRange(ordered)}</div>
+        </div>
+      </div>
+      <button onClick={()=>onEditGroup(group)} style={{padding:"7px 12px",borderRadius:"16px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"12px",fontFamily:S,fontWeight:800,cursor:"pointer",flexShrink:0}}>Edit group</button>
+    </div>
+    <div style={{fontSize:"19px",lineHeight:1.35,color:"#4a3a3f",fontFamily:S,fontWeight:800,marginBottom:"12px"}}>{title}</div>
+    <MediaCarousel items={ordered} onImageClick={onImageClick} onEdit={onEditCaption} toast={toast}/>
+    <div style={{display:"flex",gap:"6px",overflowX:"auto",paddingBottom:"2px",marginTop:"-2px"}}>
+      {ordered.slice(0,8).map((m)=><div key={m.id} style={{width:"42px",height:"42px",borderRadius:"12px",overflow:"hidden",border:m.id===cover?.id?"2px solid #c97b8b":"2px solid rgba(255,255,255,0.7)",flexShrink:0,background:"#f5eff0"}}>
+        {isVideoPath(m.primary_media_path)?<VideoThumbnail src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%"}}/>:<ProgressiveImage src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+      </div>)}
+      {ordered.length>8&&<div style={{width:"42px",height:"42px",borderRadius:"12px",background:"rgba(255,255,255,0.7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontFamily:S,fontWeight:800,color:"#9b8a78",flexShrink:0}}>+{ordered.length-8}</div>}
+    </div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",marginTop:"14px"}}>
+      <span style={{fontSize:"13px",fontFamily:S,fontWeight:800,color:A_CLR[cover?.author]||"#888"}}>{cover?.author||"Family"}</span>
+      <span style={{fontSize:"11px",fontFamily:S,fontWeight:700,color:"#d0bfc3"}}>Manual group</span>
+    </div>
+  </div>);
+}
+
+/* ---- Soft auto-suggestion card ---- */
+function SuggestionCard({suggestion,onReview,onDismiss}){
+  const ms=suggestion.moments||[];
+  if(ms.length<2)return null;
+  const first=ms[0];
+  const wash=KID_WASH[first.kid]||KID_WASH.Family;
+  return(<div className="petal-card" style={{background:"linear-gradient(135deg,#fffdf7 0%,#fff8ec 100%)",border:"1.5px solid #f0e4c8"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",marginBottom:"12px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
+        <span style={{fontSize:"22px"}}>✨</span>
+        <div>
+          <div style={{fontSize:"15px",fontFamily:S,fontWeight:800,color:"#6b5560"}}>Suggested photo group</div>
+          <div style={{fontSize:"12px",fontFamily:S,fontWeight:700,color:"#c4a8ae"}}>{ms.length} photos from {first.author} · {fmtRange(ms)}</div>
+        </div>
+      </div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(ms.length,4)},1fr)`,gap:"6px",marginBottom:"14px"}}>
+      {ms.slice(0,4).map(m=><div key={m.id} style={{height:"76px",borderRadius:"14px",overflow:"hidden",background:"#f5eff0",border:`1.5px solid ${wash.border}`}}>
+        {isVideoPath(m.primary_media_path)?<VideoThumbnail src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%"}}/>:<ProgressiveImage src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+      </div>)}
+    </div>
+    <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
+      <button onClick={()=>onReview(suggestion)} style={{padding:"9px 16px",borderRadius:"18px",border:"none",background:"#c97b8b",color:"white",fontSize:"13px",fontFamily:S,fontWeight:800,cursor:"pointer"}}>Review & group</button>
+      <button onClick={()=>onDismiss(suggestion)} style={{padding:"9px 16px",borderRadius:"18px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"13px",fontFamily:S,fontWeight:800,cursor:"pointer"}}>Keep separate</button>
+    </div>
+  </div>);
+}
+
+function SelectionBar({count,onGroup,onClear,onCancel}){
+  return(<div style={{position:"sticky",top:"0",zIndex:50,background:"rgba(255,253,251,0.96)",backdropFilter:"blur(8px)",borderBottom:"1px solid #f5ede8",padding:"10px 24px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{width:"min(640px,100%)",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+      <span style={{fontSize:"13px",fontFamily:S,fontWeight:800,color:"#6b5560",marginRight:"auto"}}>{count} selected</span>
+      <button onClick={onGroup} disabled={count<2} style={{padding:"8px 14px",borderRadius:"18px",border:"none",background:count>=2?"#c97b8b":"#ede5dc",color:count>=2?"white":"#c4a8ae",fontSize:"13px",fontFamily:S,fontWeight:800,cursor:count>=2?"pointer":"default"}}>Group selected</button>
+      <button onClick={onClear} style={{padding:"8px 14px",borderRadius:"18px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"13px",fontFamily:S,fontWeight:800,cursor:"pointer"}}>Clear</button>
+      <button onClick={onCancel} style={{padding:"8px 14px",borderRadius:"18px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"13px",fontFamily:S,fontWeight:800,cursor:"pointer"}}>Cancel</button>
+    </div>
+  </div>);
+}
+
 /* ---- Main App ---- */
 export default function App(){
   const[moments,setM]=useState([]);const[reactions,setRx]=useState([]);const[comments,setCm]=useState([]);const[loading,setL]=useState(true);
+  const[groups,setGroups]=useState([]);const[groupItems,setGroupItems]=useState([]);const[dismissals,setDismissals]=useState([]);
+  const[selectMode,setSelectMode]=useState(false);const[selectedIds,setSelectedIds]=useState([]);
+  const[groupModal,setGroupModal]=useState(null);
   const[typeF,setTF]=useState("all");const[kidF,setKF]=useState("all");
   const[search,setSe]=useState("");const[aiMode,setAi]=useState(false);const[aiR,setAiR]=useState(null);const[aiL,setAiL]=useState(false);
   const[view,setV]=useState("timeline");const[favs,setFavs]=useState(()=>{try{return JSON.parse(sessionStorage.getItem("faves")||"[]")}catch{return[]}});
@@ -263,12 +504,16 @@ export default function App(){
   const[visibleCount,setVC]=useState(20);const sentinelRef=useRef(null);
 
   useEffect(()=>{const el=sentinelRef.current;if(!el)return;const obs=new IntersectionObserver(([e])=>{if(e.isIntersecting)setVC(v=>v+15)},{rootMargin:"200px"});obs.observe(el);return()=>obs.disconnect()},[loading,view]);
-  useEffect(()=>{setVC(20)},[typeF,kidF,search,aiR,showFav,selMo,view]);
+  useEffect(()=>{setVC(20)},[typeF,kidF,search,aiR,showFav,selMo,view,groups.length,groupItems.length,dismissals.length]);
 
   const fetchM=()=>fetch(`${SB}/rest/v1/moments?order=created_at.desc&limit=500`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setM(d)}).catch(console.error);
   const fetchR=()=>fetch(`${SB}/rest/v1/reactions?order=created_at.asc`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setRx(d)}).catch(console.error);
   const fetchC=()=>fetch(`${SB}/rest/v1/comments?order=created_at.asc`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setCm(d)}).catch(console.error);
-  useEffect(()=>{Promise.all([fetchM(),fetchR(),fetchC()]).finally(()=>setL(false))},[]);
+  const fetchG=()=>fetch(`${SB}/rest/v1/moment_groups?order=created_at.desc`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setGroups(d)}).catch(()=>setGroups([]));
+  const fetchGI=()=>fetch(`${SB}/rest/v1/moment_group_items?order=position.asc`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setGroupItems(d)}).catch(()=>setGroupItems([]));
+  const fetchD=()=>fetch(`${SB}/rest/v1/moment_group_suggestion_dismissals?select=*`,{headers:sbH}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setDismissals(d)}).catch(()=>setDismissals([]));
+  const refreshGroups=()=>Promise.all([fetchG(),fetchGI(),fetchD()]);
+  useEffect(()=>{Promise.all([fetchM(),fetchR(),fetchC(),fetchG(),fetchGI(),fetchD()]).finally(()=>setL(false))},[]);
   const toggleFav=id=>{const n=favs.includes(id)?favs.filter(f=>f!==id):[...favs,id];setFavs(n);try{sessionStorage.setItem("faves",JSON.stringify(n))}catch{};const added=!favs.includes(id);toast(added?"Saved to favorites":"Removed from favorites",added?"⭐":"💫")};
   const doAi=useCallback(async q=>{if(!q.trim()){setAiR(null);return}setAiL(true);try{const r=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q,moments:moments.map(m=>({id:m.id,kid:m.kid,type:m.type,text:m.text,author:m.author,created_at:m.created_at}))})});const d=await r.json();setAiR(d.ids||[])}catch{setAiR(null)}setAiL(false)},[moments]);
   const handleSearch=v=>{setSe(v);if(aiMode){clearTimeout(sTimer.current);sTimer.current=setTimeout(()=>doAi(v),800)}};
@@ -282,9 +527,68 @@ export default function App(){
   const months=[...new Set(moments.map(m=>new Date(m.created_at).toISOString().substring(0,7)))].sort().reverse();
   const stats={total:moments.length,byKid:moments.reduce((a,m)=>({...a,[m.kid]:(a[m.kid]||0)+1}),{}),byAuthor:moments.reduce((a,m)=>({...a,[m.author]:(a[m.author]||0)+1}),{}),withMedia:moments.filter(m=>m.primary_media_path).length};
   const today=new Date();const otd=moments.filter(m=>{const d=new Date(m.created_at);return d.getMonth()===today.getMonth()&&d.getDate()===today.getDate()&&d.getFullYear()<today.getFullYear()});
-  const grp=items=>{const g={};items.forEach(m=>{const k=new Date(m.created_at).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});if(!g[k])g[k]=[];g[k].push(m)});return g};
-  const grouped=grp(filtered.slice(0,visibleCount));const fmtMo=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})};const getRx=id=>reactions.filter(r=>r.moment_id===id);const getCm=id=>comments.filter(c=>c.moment_id===id);
-  const hasMore=visibleCount<filtered.length;
+  const fmtMo=m=>{const[y,mo]=m.split("-");return new Date(y,mo-1).toLocaleDateString("en-US",{month:"long",year:"numeric"})};const getRx=id=>reactions.filter(r=>r.moment_id===id);const getCm=id=>comments.filter(c=>c.moment_id===id);
+  const dismissedKeys=new Set(dismissals.map(d=>d.suggestion_key));
+  const timelineEntities=buildTimelineEntities({moments,filtered,momentGroups:groups,groupItems,dismissedKeys});
+  const visibleEntities=timelineEntities.slice(0,visibleCount);
+  const grouped=groupByDate(visibleEntities);
+  const hasMore=visibleCount<timelineEntities.length;
+  const groupedMomentIds=new Set(groupItems.map(i=>i.moment_id));
+  const availableUngrouped=moments.filter(m=>isMediaMoment(m)&&!groupedMomentIds.has(m.id));
+
+  const toggleSelected=id=>setSelectedIds(ids=>ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]);
+  const clearSelection=()=>setSelectedIds([]);
+  const cancelSelection=()=>{setSelectMode(false);setSelectedIds([])};
+  const openCreateGroup=(ids,title="")=>{
+    const clean=[...new Set(ids)].map(id=>moments.find(m=>m.id===id)).filter(isMediaMoment).sort(sortAsc);
+    if(clean.length<2){toast("Choose at least 2 photos","📚");return}
+    setGroupModal({mode:"create",initialMomentIds:clean.map(m=>m.id),initialTitle:title||defaultGroupTitle(clean)});
+  };
+  const openEditGroup=group=>{
+    const ids=groupItems.filter(i=>i.group_id===group.id).sort((a,b)=>(a.position??0)-(b.position??0)).map(i=>i.moment_id);
+    setGroupModal({mode:"edit",group,initialMomentIds:ids,initialTitle:group.title||""});
+  };
+
+  const saveGroup=async({mode,group,title,coverId,momentIds})=>{
+    try{
+      if(mode==="create"){
+        const createdBy=gN()||moments.find(m=>m.id===momentIds[0])?.author||"Family";
+        const gr=await sbPost("moment_groups",{title,cover_moment_id:coverId,created_by:createdBy});
+        if(!gr.ok)throw new Error(await gr.text());
+        const gd=await gr.json();const newGroup=gd?.[0];
+        if(!newGroup?.id)throw new Error("Group was not returned");
+        const rows=momentIds.map((id,i)=>({group_id:newGroup.id,moment_id:id,position:i}));
+        const ir=await sbPost("moment_group_items",rows);
+        if(!ir.ok)throw new Error(await ir.text());
+        toast("Photo group created","📚");
+      }else{
+        const pr=await sbPatch(`moment_groups?id=eq.${group.id}`,{title,cover_moment_id:coverId,updated_at:new Date().toISOString()});
+        if(!pr.ok)throw new Error(await pr.text());
+        const dr=await sbDel(`moment_group_items?group_id=eq.${group.id}`);
+        if(!dr.ok)throw new Error(await dr.text());
+        const rows=momentIds.map((id,i)=>({group_id:group.id,moment_id:id,position:i}));
+        const ir=await sbPost("moment_group_items",rows);
+        if(!ir.ok)throw new Error(await ir.text());
+        toast("Group saved","✅");
+      }
+      setGroupModal(null);cancelSelection();await refreshGroups();
+    }catch(e){console.error(e);toast("Couldn't save group","❌")}
+  };
+
+  const deleteGroup=async(group)=>{
+    if(!group?.id)return;
+    const ok=window.confirm("Ungroup all photos? This will not delete any photos.");
+    if(!ok)return;
+    try{const r=await sbDel(`moment_groups?id=eq.${group.id}`);if(!r.ok)throw new Error(await r.text());toast("Photos ungrouped","📚");setGroupModal(null);await refreshGroups()}catch(e){console.error(e);toast("Couldn't ungroup","❌")}
+  };
+
+  const dismissSuggestion=async(suggestion)=>{
+    try{
+      const r=await sbPost("moment_group_suggestion_dismissals",{suggestion_key:suggestion.key,dismissed_by:gN()||null});
+      if(!r.ok&&r.status!==409)throw new Error(await r.text());
+      toast("Kept separate","👌");fetchD();
+    }catch(e){console.error(e);toast("Couldn't dismiss","❌")}
+  };
 
   // #4 Include audio in mediaList for lightbox swipe
   const mediaList=filtered.filter(m=>m.primary_media_path).map(m=>{const u=`${MEDIA}/${m.primary_media_path}`;const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");const isA=m.primary_media_path?.endsWith(".ogg")||m.primary_media_path?.endsWith(".mp3")||m.primary_media_path?.endsWith(".oga");return{url:u,isVideo:isV,isAudio:isA,moment:m}});
@@ -357,6 +661,7 @@ export default function App(){
         <button title="Gallery" className={`view-btn ${view==="gallery"?"on":""}`} onClick={()=>setV("gallery")}>🖼</button>
         <button title="Milestones" className={`view-btn ${view==="milestones"?"on":""}`} onClick={()=>setV("milestones")}>🏆</button>
         <button title="Favorites" className={`view-btn ${showFav?"on":""}`} onClick={()=>setSF(!showFav)}>⭐</button>
+        <button title="Select photos to group" className={`view-btn ${selectMode?"on":""}`} onClick={()=>{setSelectMode(!selectMode);setSelectedIds([]);setV("timeline")}}>✅</button>
       </div>
 
       <div style={{display:"flex",gap:"8px",padding:"12px 24px",overflowX:"auto",background:"white",borderBottom:"1px solid #f5ede8"}}>
@@ -369,6 +674,7 @@ export default function App(){
 
       {months.length>1&&(<div style={{display:"flex",gap:"8px",padding:"10px 24px",overflowX:"auto",background:"#fefcfa",borderBottom:"1px solid #f5ede8"}}><button className={`petal-btn ${selMo==="all"?"on":""}`} onClick={()=>setSelMo("all")}>All Time</button>{months.map(m=><button key={m} className={`petal-btn ${selMo===m?"on":""}`} onClick={()=>setSelMo(m)}>{fmtMo(m)}</button>)}</div>)}
 
+      {selectMode&&<SelectionBar count={selectedIds.length} onGroup={()=>openCreateGroup(selectedIds)} onClear={clearSelection} onCancel={cancelSelection}/>}
       {view==="timeline"&&<CalendarHeatmap moments={moments}/>}
 
       {view==="timeline"&&otd.length>0&&(<div style={{maxWidth:"640px",margin:"0 auto",padding:"16px 16px 0"}}><div style={{background:"linear-gradient(135deg,#fffcf0,#fff5e0)",borderRadius:"22px",padding:"18px 22px",border:"1.5px solid #f5e4c0"}}><div style={{fontSize:"12px",letterSpacing:"2px",textTransform:"uppercase",color:"#d4a030",fontFamily:S,fontWeight:700,marginBottom:"10px"}}>✨ On this day</div>{otd.map(m=><div key={m.id} style={{fontSize:"18px",color:"#5c4a4f",marginBottom:"6px",lineHeight:1.4}}>"{m.text}" <span style={{fontFamily:S,fontSize:"12px",color:"#c4a8ae",fontWeight:600}}>- {m.author}, {new Date(m.created_at).getFullYear()}</span></div>)}</div></div>)}
@@ -381,15 +687,30 @@ export default function App(){
         :filtered.length===0?<EmptyState type={aiMode&&search?"ai":search?"search":showFav?"fav":"empty"}/>
         :(<div style={{position:"relative",paddingLeft:"32px"}}>
             <div style={{position:"absolute",left:"11px",top:0,bottom:0,width:"2px",background:"linear-gradient(to bottom,#c97b8b,#ddd4f0,#f0e4c8)",borderRadius:"1px"}}/>
-            {Object.entries(grouped).map(([date,items])=>{
-              const clusters=clusterMoments(items);
-              return(<div key={date} style={{marginBottom:"36px"}}><div className="sticky-date"><div style={{display:"flex",alignItems:"center"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#dbb0bb)",border:"3px solid #faf8f5",flexShrink:0,zIndex:1,boxShadow:"0 2px 6px rgba(201,123,139,0.2)"}}/><div style={{fontSize:"12px",letterSpacing:"2.5px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginLeft:"14px"}}>{date}</div></div></div>
-              <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>{clusters.map((cl,idx)=>{const m=cl.primary;return(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} extraMoments={cl.extra} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} comments={getCm(m.id)} onComment={fetchC} onImageClick={openLightbox} toast={toast} onEdit={updateMoment}/></div>)})}</div></div>)})}
+            {Object.entries(grouped).map(([date,items])=>(
+              <div key={date} style={{marginBottom:"36px"}}>
+                <div className="sticky-date"><div style={{display:"flex",alignItems:"center"}}><div style={{width:"22px",height:"22px",borderRadius:"50%",background:"linear-gradient(135deg,#c97b8b,#dbb0bb)",border:"3px solid #faf8f5",flexShrink:0,zIndex:1,boxShadow:"0 2px 6px rgba(201,123,139,0.2)"}}/><div style={{fontSize:"12px",letterSpacing:"2.5px",textTransform:"uppercase",color:"#c4a8ae",fontFamily:S,fontWeight:700,marginLeft:"14px"}}>{date}</div></div></div>
+                <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+                  {items.map((entry,idx)=>{
+                    if(entry.kind==="group"){
+                      const ordered=entry.moments.map(m=>{const gi=groupItems.find(i=>i.group_id===entry.group.id&&i.moment_id===m.id);return{...m,__position:gi?.position??0}});
+                      return(<div key={entry.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><GroupCard group={entry.group} moments={ordered} onImageClick={openLightbox} onEditGroup={openEditGroup} onEditCaption={updateMoment} toast={toast}/></div>);
+                    }
+                    if(entry.kind==="suggestion"){
+                      return(<div key={entry.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#e8c76a",border:"2.5px solid #faf8f5",zIndex:1}}/><SuggestionCard suggestion={entry.suggestion} onReview={s=>openCreateGroup(s.moments.map(m=>m.id),defaultGroupTitle(s.moments))} onDismiss={dismissSuggestion}/></div>);
+                    }
+                    const m=entry.moment;
+                    return(<div key={m.id} className="bloom" style={{animationDelay:`${idx*0.08}s`,position:"relative"}}><div style={{position:"absolute",left:"-27px",top:"26px",width:"10px",height:"10px",borderRadius:"50%",background:"#dbb0bb",border:"2.5px solid #faf8f5",zIndex:1}}/><Card m={m} extraMoments={[]} faved={favs.includes(m.id)} onFav={()=>toggleFav(m.id)} reactions={getRx(m.id)} onReact={fetchR} comments={getCm(m.id)} onComment={fetchC} onImageClick={openLightbox} toast={toast} onEdit={updateMoment} selectMode={selectMode} selected={selectedIds.includes(m.id)} onSelect={()=>toggleSelected(m.id)}/></div>);
+                  })}
+                </div>
+              </div>
+            ))}
           </div>)}
         {view==="timeline"&&hasMore&&<div ref={sentinelRef} style={{display:"flex",justifyContent:"center",padding:"24px"}}><div className="loading-dots" style={{display:"flex",gap:"6px",alignItems:"center"}}><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#d0bfc3"}}>Loading more</span>{[0,1,2].map(i=><div key={i} style={{width:"6px",height:"6px",borderRadius:"50%",background:"#d0bfc3",animation:`dotPulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div></div>}
         </div>
       </div>
       <div style={{textAlign:"center",padding:"40px",fontSize:"20px",color:"#e0d0d5"}}>made with ❤️ by the Henes family</div>
+      {groupModal&&<GroupEditModal mode={groupModal.mode} group={groupModal.group} initialMomentIds={groupModal.initialMomentIds} initialTitle={groupModal.initialTitle} moments={moments} availableMoments={availableUngrouped} onClose={()=>setGroupModal(null)} onSave={saveGroup} onDelete={deleteGroup} onCaptionEdit={updateMoment} toast={toast}/>}
       {lightbox&&<Lightbox data={lightbox} onClose={()=>setLightbox(null)} mediaList={mediaList} onNavigate={setLightbox} toast={toast}/>}
       <ToastContainer toasts={toasts}/>
     </div>
@@ -472,7 +793,7 @@ function Comments({mid,comments,onComment,toast}){
 }
 
 /* ---- Card with inline edit + multi-photo carousel ---- */
-function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onComment,onImageClick,toast,onEdit}){
+function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onComment,onImageClick,toast,onEdit,selectMode=false,selected=false,onSelect}){
   const time=new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   const url=m.primary_media_path?`${MEDIA}/${m.primary_media_path}`:null;
   const isV=m.primary_media_path?.endsWith(".mp4")||m.primary_media_path?.endsWith(".mov");
@@ -491,6 +812,7 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onCommen
 
   return(<div className="petal-card" style={{background:wash.bg,border:`1.5px solid ${wash.border}`}}>
     {isM&&<Confetti active={conf}/>}
+    {selectMode&&m.primary_media_path&&<button onClick={e=>{e.stopPropagation();onSelect&&onSelect(m.id)}} title={selected?"Selected":"Select for group"} style={{position:"absolute",top:"14px",left:"14px",zIndex:8,width:"32px",height:"32px",borderRadius:"50%",border:selected?"none":"2px solid rgba(201,123,139,0.45)",background:selected?"#c97b8b":"rgba(255,255,255,0.86)",color:selected?"white":"#c97b8b",fontSize:"16px",fontFamily:S,fontWeight:900,cursor:"pointer",boxShadow:"0 4px 14px rgba(0,0,0,0.08)"}}>{selected?"✓":""}</button>}
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px",position:"relative",zIndex:3}}>
       <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"22px"}}>{EMOJI[m.type]||"✨"}</span><div><span style={{fontSize:"15px",fontFamily:S,fontWeight:700,color:"#6b5560"}}>{m.kid}</span><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#c4a8ae",marginLeft:"6px"}}>{m.type}</span></div></div>
       <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
