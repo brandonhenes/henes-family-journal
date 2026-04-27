@@ -8,13 +8,14 @@ const FAMILY_NAMES = ["Brandon","Jacky","Grandma","Grandpa"];
 const EMOJI = {Milestone:"🌟",Funny:"😂",Quote:"💬",First:"🎉",Health:"💚",Memory:"📸",Other:"✨"};
 const A_CLR = {Brandon:"#5b8fb9",Jacky:"#c97b8b",Grandma:"#9b7fc4",Grandpa:"#6aab7b"};
 const KID_WASH = {
-  Gabby:{bg:"linear-gradient(135deg,#fff5f7 0%,#ffe8ed 30%,#fff0f5 100%)",border:"#f5d5dc"},
-  Madelyn:{bg:"linear-gradient(135deg,#f5f3ff 0%,#ede8ff 30%,#f8f5ff 100%)",border:"#ddd4f0"},
-  Both:{bg:"linear-gradient(135deg,#fff5f7 0%,#f0ecff 100%)",border:"#e8d8ee"},
-  Family:{bg:"linear-gradient(135deg,#fffcf0 0%,#fff5e0 30%,#fffaf0 100%)",border:"#f0e4c8"},
+  Gabby:{bg:"#fffdfb",border:"#ece4dc"},
+  Madelyn:{bg:"#fffdfb",border:"#ece4dc"},
+  Both:{bg:"#fffdfb",border:"#ece4dc"},
+  Family:{bg:"#fffdfb",border:"#ece4dc"},
 };
 const BIRTHDAYS={Gabby:new Date("2024-07-01"),Madelyn:new Date("2026-07-01")};
 const S = "'Source Sans 3',sans-serif";
+const SERIF = "'Lora','Georgia',serif";
 const sbH = {apikey:KEY,Authorization:`Bearer ${KEY}`,"Content-Type":"application/json"};
 const sbPost=(p,b)=>fetch(`${SB}/rest/v1/${p}`,{method:"POST",headers:{...sbH,Prefer:"return=representation"},body:JSON.stringify(b)});
 const sbDel=p=>fetch(`${SB}/rest/v1/${p}`,{method:"DELETE",headers:sbH});
@@ -321,6 +322,7 @@ function GroupEditModal({mode="edit",group=null,initialMomentIds=[],initialTitle
   const[coverId,setCoverId]=useState(group?.cover_moment_id||initialIds[0]||null);
   const[dragId,setDragId]=useState(null);
   const[showAdd,setShowAdd]=useState(false);
+  const[previewUrl,setPreviewUrl]=useState(null);
   const[addIds,setAddIds]=useState([]);
   const ordered=order.map(id=>byId.get(id)).filter(Boolean);
   const cover=ordered.find(m=>m.id===coverId)||ordered[0]||null;
@@ -363,27 +365,28 @@ function GroupEditModal({mode="edit",group=null,initialMomentIds=[],initialTitle
         <div style={{fontSize:"11px",letterSpacing:"1.5px",textTransform:"uppercase",fontFamily:S,fontWeight:800,color:"#c4a8ae",marginBottom:"10px"}}>Photos</div>
         <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
           {ordered.map((m,i)=>{const isCover=(coverId||ordered[0]?.id)===m.id;return(
-            <div key={m.id} draggable onDragStart={()=>setDragId(m.id)} onDragOver={e=>e.preventDefault()} onDrop={()=>dropOn(m.id)} onDragEnd={()=>setDragId(null)} style={{display:"grid",gridTemplateColumns:"34px 52px 1fr",gap:"10px",alignItems:"center",padding:"10px",borderRadius:"18px",background:dragId===m.id?"#fff5f7":"white",border:`1.5px solid ${isCover?"#c97b8b":"#f0e8e4"}`}}>
-              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
-                <button title="Drag to reorder" style={{border:"none",background:"transparent",cursor:"grab",fontSize:"18px",color:"#c4a8ae",lineHeight:1}}>☰</button>
-                <div style={{display:"flex",gap:"2px"}}>
-                  <button onClick={()=>move(m.id,-1)} disabled={i===0} style={{border:"none",background:"#f8f0f2",color:i===0?"#ddd":"#9b8a78",borderRadius:"8px",width:"18px",height:"18px",fontSize:"10px",cursor:i===0?"default":"pointer"}}>↑</button>
-                  <button onClick={()=>move(m.id,1)} disabled={i===ordered.length-1} style={{border:"none",background:"#f8f0f2",color:i===ordered.length-1?"#ddd":"#9b8a78",borderRadius:"8px",width:"18px",height:"18px",fontSize:"10px",cursor:i===ordered.length-1?"default":"pointer"}}>↓</button>
+            <div key={m.id} draggable onDragStart={()=>setDragId(m.id)} onDragOver={e=>e.preventDefault()} onDrop={()=>dropOn(m.id)} onDragEnd={()=>setDragId(null)} style={{display:"grid",gridTemplateColumns:"38px 120px 1fr",gap:"12px",alignItems:"center",padding:"12px",borderRadius:"18px",background:dragId===m.id?"#fff5f7":"white",border:`1.5px solid ${isCover?"#c97b8b":"#f0e8e4"}`}}>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
+                <button title="Drag to reorder" style={{border:"none",background:"transparent",cursor:"grab",fontSize:"20px",color:"#c4a8ae",lineHeight:1,padding:"2px"}}>☰</button>
+                <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
+                  <button onClick={()=>move(m.id,-1)} disabled={i===0} style={{border:"none",background:"#f8f0f2",color:i===0?"#ddd":"#9b8a78",borderRadius:"8px",width:"24px",height:"22px",fontSize:"12px",fontWeight:700,cursor:i===0?"default":"pointer"}}>↑</button>
+                  <button onClick={()=>move(m.id,1)} disabled={i===ordered.length-1} style={{border:"none",background:"#f8f0f2",color:i===ordered.length-1?"#ddd":"#9b8a78",borderRadius:"8px",width:"24px",height:"22px",fontSize:"12px",fontWeight:700,cursor:i===ordered.length-1?"default":"pointer"}}>↓</button>
                 </div>
               </div>
-              <div style={{width:"52px",height:"52px",borderRadius:"14px",overflow:"hidden",background:"#f5eff0"}}>
+              <div onClick={()=>setPreviewUrl(`${MEDIA}/${m.primary_media_path}`)} style={{width:"120px",height:"120px",borderRadius:"14px",overflow:"hidden",background:"#f5eff0",cursor:"zoom-in",position:"relative"}}>
                 {isVideoPath(m.primary_media_path)?<VideoThumbnail src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%"}}/>:<ProgressiveImage src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                <div style={{position:"absolute",bottom:"6px",right:"6px",background:"rgba(0,0,0,0.5)",color:"white",borderRadius:"8px",padding:"2px 8px",fontSize:"10px",fontFamily:S,fontWeight:700,backdropFilter:"blur(4px)"}}>Tap to enlarge</div>
               </div>
               <div style={{minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"5px"}}>
-                  <span style={{fontSize:"12px",fontFamily:S,fontWeight:800,color:"#9b8a78"}}>{i+1}</span>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+                  <span style={{fontSize:"13px",fontFamily:S,fontWeight:800,color:"#9b8a78"}}>{i+1}</span>
                   {isCover&&<span style={{fontSize:"10px",fontFamily:S,fontWeight:800,color:"white",background:"#c97b8b",borderRadius:"12px",padding:"2px 8px"}}>Cover</span>}
                   <span style={{marginLeft:"auto",fontSize:"11px",fontFamily:S,fontWeight:700,color:"#d0bfc3"}}>{new Date(m.created_at).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</span>
                 </div>
-                <div style={{fontSize:"14px",lineHeight:1.35,color:"#4a3a3f",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.text?.startsWith("[")?"Untitled photo":m.text}</div>
-                <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginTop:"8px"}}>
-                  {!isCover&&<button onClick={()=>setCoverId(m.id)} style={{border:"none",background:"transparent",color:"#c97b8b",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Set cover</button>}
-                  <button onClick={()=>editCaption(m)} style={{border:"none",background:"transparent",color:"#9b8a78",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Edit caption</button>
+                <div style={{fontSize:"14px",lineHeight:1.4,color:"#4a3a3f",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{m.text?.startsWith("[")?"Untitled photo":m.text}</div>
+                <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginTop:"10px"}}>
+                  {!isCover&&<button onClick={()=>setCoverId(m.id)} style={{border:"none",background:"transparent",color:"#c97b8b",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer",padding:0}}>Set cover</button>}
+                  <button onClick={()=>editCaption(m)} style={{border:"none",background:"transparent",color:"#9b8a78",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer",padding:0}}>Edit caption</button>
                   <button onClick={()=>remove(m.id)} style={{border:"none",background:"transparent",color:"#c97b8b",fontSize:"12px",fontFamily:S,fontWeight:700,cursor:"pointer"}}>Remove</button>
                 </div>
               </div>
@@ -398,9 +401,9 @@ function GroupEditModal({mode="edit",group=null,initialMomentIds=[],initialTitle
 
         {showAdd&&<div style={{marginTop:"14px",padding:"14px",borderRadius:"18px",background:"#fef8f5",border:"1.5px solid #f0e8e4"}}>
           <div style={{fontSize:"12px",fontFamily:S,fontWeight:800,color:"#9b8a78",marginBottom:"10px"}}>{unused.length?`Add photos to this group`:"No available ungrouped photos"}</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(86px,1fr))",gap:"8px",maxHeight:"240px",overflow:"auto"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:"8px",maxHeight:"320px",overflow:"auto"}}>
             {unused.map(m=>{const on=addIds.includes(m.id);return(
-              <button key={m.id} onClick={()=>setAddIds(ids=>on?ids.filter(id=>id!==m.id):[...ids,m.id])} style={{border:`2px solid ${on?"#c97b8b":"transparent"}`,borderRadius:"14px",padding:0,overflow:"hidden",background:"white",height:"86px",position:"relative",cursor:"pointer"}}>
+              <button key={m.id} onClick={()=>setAddIds(ids=>on?ids.filter(id=>id!==m.id):[...ids,m.id])} style={{border:`2px solid ${on?"#c97b8b":"transparent"}`,borderRadius:"14px",padding:0,overflow:"hidden",background:"white",height:"110px",position:"relative",cursor:"pointer"}}>
                 {isVideoPath(m.primary_media_path)?<VideoThumbnail src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%"}}/>:<ProgressiveImage src={`${MEDIA}/${m.primary_media_path}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
                 {on&&<span style={{position:"absolute",top:"6px",right:"6px",width:"22px",height:"22px",borderRadius:"50%",background:"#c97b8b",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",fontWeight:800}}>✓</span>}
               </button>
@@ -415,6 +418,10 @@ function GroupEditModal({mode="edit",group=null,initialMomentIds=[],initialTitle
         </div>
       </div>
     </div>
+    {previewUrl&&<div onClick={()=>setPreviewUrl(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1700,display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",cursor:"zoom-out",backdropFilter:"blur(8px)"}}>
+      <button onClick={e=>{e.stopPropagation();setPreviewUrl(null)}} style={{position:"absolute",top:"16px",right:"16px",background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:"22px",width:"44px",height:"44px",borderRadius:"50%",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",backdropFilter:"blur(4px)"}}>✕</button>
+      {previewUrl.endsWith(".mp4")||previewUrl.endsWith(".mov")?<video controls autoPlay playsInline src={previewUrl} style={{maxWidth:"92vw",maxHeight:"85vh",borderRadius:"16px"}}/>:<img src={previewUrl} alt="" style={{maxWidth:"92vw",maxHeight:"85vh",objectFit:"contain",borderRadius:"12px"}}/>}
+    </div>}
   </div>);
 }
 
@@ -435,7 +442,7 @@ function GroupCard({group,moments,onImageClick,onEditGroup,onEditCaption,toast})
       </div>
       <button onClick={()=>onEditGroup(group)} style={{padding:"7px 12px",borderRadius:"16px",border:"1.5px solid #ede5dc",background:"white",color:"#9b8a78",fontSize:"12px",fontFamily:S,fontWeight:800,cursor:"pointer",flexShrink:0}}>Edit group</button>
     </div>
-    <div style={{fontSize:"19px",lineHeight:1.35,color:"#4a3a3f",fontFamily:S,fontWeight:800,marginBottom:"12px"}}>{title}</div>
+    <div style={{fontFamily:SERIF,fontSize:"22px",lineHeight:1.3,color:"#3d2a30",fontWeight:500,marginBottom:"14px"}}>{title}</div>
     <MediaCarousel items={ordered} onImageClick={onImageClick} onEdit={onEditCaption} toast={toast}/>
     <div style={{display:"flex",gap:"6px",overflowX:"auto",paddingBottom:"2px",marginTop:"-2px"}}>
       {ordered.slice(0,8).map((m)=><div key={m.id} style={{width:"42px",height:"42px",borderRadius:"12px",overflow:"hidden",border:m.id===cover?.id?"2px solid #c97b8b":"2px solid rgba(255,255,255,0.7)",flexShrink:0,background:"#f5eff0"}}>
@@ -597,7 +604,7 @@ export default function App(){
   return(
     <div style={{minHeight:"100vh",background:"#faf8f5",fontFamily:"'Source Sans 3',sans-serif"}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
         *{margin:0;padding:0;box-sizing:border-box}body{background:#faf8f5;-webkit-font-smoothing:antialiased}
         @keyframes bloomIn{from{opacity:0;transform:scale(0.92) translateY(16px)}to{opacity:1;transform:scale(1) translateY(0)}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -616,7 +623,7 @@ export default function App(){
         .empty-icon{animation:emptyBounce 2s ease-in-out infinite}
         .empty-float{animation:emptyFloat 3s ease-in-out infinite}
         .shimmer-overlay{overflow:hidden}.shimmer-overlay::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.4) 50%,transparent 100%);animation:shimmer 1.8s ease-in-out infinite}
-        .petal-card{border-radius:24px;padding:24px;position:relative;overflow:hidden;transition:transform 0.3s,box-shadow 0.3s;box-shadow:0 1px 4px rgba(0,0,0,0.03),0 4px 14px rgba(0,0,0,0.02)}.petal-card:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(0,0,0,0.06)}
+        .petal-card{border-radius:14px;padding:22px;position:relative;overflow:hidden;transition:transform 0.3s,box-shadow 0.3s;box-shadow:0 1px 2px rgba(0,0,0,0.02)}.petal-card:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,0.04)}
         .petal-btn{padding:8px 18px;border-radius:24px;cursor:pointer;font-size:13px;font-family:${S};font-weight:600;border:2px solid #ede5dc;background:white;color:#9b8a78;transition:all 0.2s}.petal-btn:hover{border-color:#d4bfb0;color:#6b5d50}.petal-btn.on{border-color:#c97b8b;background:#fff5f7;color:#c97b8b}
         .view-btn{width:38px;height:38px;border-radius:14px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;border:2px solid #ede5dc;background:white}.view-btn:hover{border-color:#d4bfb0;background:#fef8f5}.view-btn.on{border-color:#c97b8b;background:#fff5f7}
         .search-f{width:100%;padding:14px 18px 14px 44px;border:2px solid #ede5dc;border-radius:28px;font-size:16px;font-family:'Source Sans 3',sans-serif;background:white;outline:none;color:#5c4a4f;transition:border-color 0.2s,box-shadow 0.2s}.search-f:focus{border-color:#d4bfb0;box-shadow:0 0 0 4px rgba(201,123,139,0.06)}
@@ -635,18 +642,15 @@ export default function App(){
         .edit-area{width:100%;border:2px solid #c97b8b;border-radius:14px;padding:12px;font-size:16px;font-family:'Source Sans 3',sans-serif;background:#fff8f6;outline:none;resize:vertical;min-height:60px;color:#4a3a3f;line-height:1.5}
       `}</style>
 
-      <div style={{padding:"52px 24px 36px",textAlign:"center",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",top:"-30px",left:"-50px",width:"300px",height:"300px",borderRadius:"50%",background:"radial-gradient(ellipse,rgba(244,180,190,0.18) 0%,transparent 70%)",filter:"blur(20px)",pointerEvents:"none"}}/>
-        <div style={{position:"absolute",top:"20px",right:"-40px",width:"260px",height:"260px",borderRadius:"50%",background:"radial-gradient(ellipse,rgba(180,190,244,0.12) 0%,transparent 70%)",filter:"blur(20px)",pointerEvents:"none"}}/>
-        <div style={{position:"absolute",bottom:"-20px",left:"30%",width:"220px",height:"220px",borderRadius:"50%",background:"radial-gradient(ellipse,rgba(244,220,180,0.12) 0%,transparent 70%)",filter:"blur(20px)",pointerEvents:"none"}}/>
-        <div style={{position:"relative"}}>
-          <div style={{fontSize:"14px",fontFamily:S,fontWeight:700,letterSpacing:"4px",textTransform:"uppercase",color:"#c97b8b",marginBottom:"8px",opacity:0.7}}>est. 2024 & 2026</div>
-          <h1 style={{fontSize:"52px",fontWeight:700,color:"#5c4a4f",marginBottom:"6px"}}>Gabby & Maddy Memories</h1>
-          <p style={{fontSize:"18px",color:"#b8a0a5",fontFamily:S,fontWeight:500}}>{stats.total} little moments saved</p>
-          <div style={{display:"flex",justifyContent:"center",gap:"10px",marginTop:"20px",flexWrap:"wrap",fontFamily:S}}>
-            {Object.entries(stats.byKid).map(([k,n])=><div key={k} style={{background:"rgba(255,255,255,0.7)",borderRadius:"24px",padding:"7px 18px",fontSize:"13px",fontWeight:600,border:"1px solid rgba(201,123,139,0.15)",backdropFilter:"blur(4px)"}}>{k}: {n}</div>)}
-            {Object.entries(stats.byAuthor).map(([a,n])=><div key={a} style={{background:"rgba(255,255,255,0.7)",borderRadius:"24px",padding:"7px 18px",fontSize:"13px",fontWeight:600,border:"1px solid rgba(201,123,139,0.15)",color:A_CLR[a]||"#9b8a78"}}>{a}: {n}</div>)}
-          </div>
+      <div style={{padding:"56px 24px 32px",textAlign:"center"}}>
+        <div style={{fontSize:"11px",fontFamily:S,fontWeight:500,letterSpacing:"3px",textTransform:"uppercase",color:"#b08a94",marginBottom:"14px"}}>Est. 2024 &amp; 2026</div>
+        <h1 style={{fontFamily:SERIF,fontSize:"52px",fontWeight:400,color:"#3d2a30",letterSpacing:"-0.5px",lineHeight:1.05,marginBottom:"2px"}}>Gabby &amp; Maddy</h1>
+        <div style={{fontFamily:SERIF,fontSize:"52px",fontWeight:400,fontStyle:"italic",color:"#3d2a30",letterSpacing:"-0.5px",lineHeight:1.05}}>Memories</div>
+        <div style={{width:"40px",height:"1px",background:"#d4a5b0",margin:"22px auto"}}/>
+        <p style={{fontSize:"13px",color:"#a68a90",fontFamily:S,fontWeight:500,letterSpacing:"0.3px"}}>{stats.total} moments · {Object.keys(stats.byAuthor).length} voices</p>
+        <div style={{display:"flex",justifyContent:"center",gap:"6px",marginTop:"22px",flexWrap:"wrap",fontFamily:S}}>
+          {Object.entries(stats.byKid).map(([k,n])=><div key={k} style={{borderRadius:"14px",padding:"4px 12px",fontSize:"11px",fontWeight:500,letterSpacing:"0.5px",border:"0.5px solid #e8dfd6",color:"#7d6b62"}}>{k}: {n}</div>)}
+          {Object.entries(stats.byAuthor).map(([a,n])=><div key={a} style={{borderRadius:"14px",padding:"4px 12px",fontSize:"11px",fontWeight:500,letterSpacing:"0.5px",border:"0.5px solid #e8dfd6",color:A_CLR[a]||"#7d6b62"}}>{a}: {n}</div>)}
         </div>
       </div>
 
@@ -810,17 +814,25 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onCommen
   const saveEdit=()=>{if(editText.trim()&&editText!==m.text){onEdit(m.id,editText.trim())}setEditing(false)};
   const cancelEdit=()=>{setEditText(m.text);setEditing(false)};
 
-  return(<div className="petal-card" style={{background:wash.bg,border:`1.5px solid ${wash.border}`}}>
+  return(<div className="petal-card" style={{background:wash.bg,border:`0.5px solid ${wash.border}`}}>
     {isM&&<Confetti active={conf}/>}
     {selectMode&&m.primary_media_path&&<button onClick={e=>{e.stopPropagation();onSelect&&onSelect(m.id)}} title={selected?"Selected":"Select for group"} style={{position:"absolute",top:"14px",left:"14px",zIndex:8,width:"32px",height:"32px",borderRadius:"50%",border:selected?"none":"2px solid rgba(201,123,139,0.45)",background:selected?"#c97b8b":"rgba(255,255,255,0.86)",color:selected?"white":"#c97b8b",fontSize:"16px",fontFamily:S,fontWeight:900,cursor:"pointer",boxShadow:"0 4px 14px rgba(0,0,0,0.08)"}}>{selected?"✓":""}</button>}
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px",position:"relative",zIndex:3}}>
-      <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"22px"}}>{EMOJI[m.type]||"✨"}</span><div><span style={{fontSize:"15px",fontFamily:S,fontWeight:700,color:"#6b5560"}}>{m.kid}</span><span style={{fontSize:"12px",fontFamily:S,fontWeight:600,color:"#c4a8ae",marginLeft:"6px"}}>{m.type}</span></div></div>
-      <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"14px",position:"relative",zIndex:3}}>
+      <div>
+        <div style={{fontSize:"10px",fontFamily:S,fontWeight:500,letterSpacing:"1.8px",textTransform:"uppercase",color:"#b08a94"}}>{m.type}</div>
+        <div style={{fontFamily:SERIF,fontSize:"19px",fontWeight:500,color:"#3d2a30",marginTop:"2px"}}>{m.kid}</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+        <span style={{fontSize:"11px",fontFamily:S,color:"#a68a90",fontWeight:500,fontVariantNumeric:"tabular-nums"}}>{new Date(m.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})} · {time}</span>
         {!editing&&url&&<button onClick={()=>downloadMedia(url,toast)} title="Download" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>💾</button>}
         {!editing&&!hasCarousel&&<button onClick={()=>setEditing(true)} title="Edit" style={{background:"none",border:"none",cursor:"pointer",fontSize:"13px",padding:"4px",opacity:0.25,transition:"opacity 0.2s"}} onMouseEnter={e=>e.target.style.opacity="0.6"} onMouseLeave={e=>e.target.style.opacity="0.25"}>✏️</button>}
-        <ShareBtn m={m} toast={toast}/><button onClick={onFav} title={faved?"Unfavorite":"Favorite"} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button><span style={{fontSize:"11px",fontFamily:S,color:"#d0bfc3",fontWeight:600}}>{time}</span>
+        <ShareBtn m={m} toast={toast}/><button onClick={onFav} title={faved?"Unfavorite":"Favorite"} style={{background:"none",border:"none",cursor:"pointer",fontSize:"16px",padding:"4px",opacity:faved?1:0.25,transition:"opacity 0.2s"}}>{faved?"⭐":"☆"}</button>
       </div>
     </div>
+    {hasCarousel?<MediaCarousel items={allMedia} onImageClick={onImageClick} onEdit={onEdit} toast={toast}/>:(<>
+      {isV&&url&&<div style={{marginBottom:"14px"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:true,moment:m})}><VideoThumbnail src={url}/></div>}
+      {isI&&url&&<div style={{marginBottom:"14px",overflow:"hidden"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,moment:m})}><ProgressiveImage src={url} style={{width:"100%",borderRadius:"10px",maxHeight:"400px",objectFit:"cover"}} /></div>}
+    </>)}
     {!hide&&!hasCarousel&&(editing?(
       <div style={{marginBottom:"14px",position:"relative",zIndex:3}}>
         <textarea className="edit-area" value={editText} onChange={e=>setEditText(e.target.value)} autoFocus/>
@@ -830,19 +842,18 @@ function Card({m,extraMoments=[],faved,onFav,reactions,onReact,comments,onCommen
         </div>
       </div>
     ):(
-      <div style={{fontSize:"17px",lineHeight:1.6,color:"#4a3a3f",marginBottom:"14px",fontStyle:m.type==="Quote"?"italic":"normal",position:"relative",zIndex:3}}>{m.type==="Quote"?<>&#8220;{m.text}&#8221;</>:`"${m.text}"`}</div>
+      <div style={{fontFamily:SERIF,fontSize:"18px",lineHeight:1.5,color:"#3d2a30",marginBottom:"14px",fontStyle:"italic",position:"relative",zIndex:3}}>&#8220;{m.text}&#8221;</div>
     ))}
-    {hasCarousel?<MediaCarousel items={allMedia} onImageClick={onImageClick} onEdit={onEdit} toast={toast}/>:(<>
-      {isV&&url&&<div style={{marginBottom:"14px"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:true,moment:m})}><VideoThumbnail src={url}/></div>}
-      {isI&&url&&<div style={{marginBottom:"14px",overflow:"hidden"}} className="clickable-media" onClick={()=>onImageClick({url,isVideo:false,moment:m})}><ProgressiveImage src={url} style={{width:"100%",borderRadius:"18px",maxHeight:"400px",objectFit:"cover"}} /></div>}
-    </>)}
     {isA&&url&&<VoicePreview onClick={()=>onImageClick({url,isVideo:false,isAudio:true,moment:m})}/>}
     {extraMoments.length>0&&extraMoments.some(x=>!x.primary_media_path&&!(x.text.startsWith("[")&&x.text.endsWith("]")))&&(
-      <div style={{borderTop:`1px solid ${wash.border}`,marginTop:"12px",paddingTop:"12px"}}>
-        {extraMoments.filter(x=>!x.primary_media_path&&!(x.text.startsWith("[")&&x.text.endsWith("]"))).map(x=><div key={x.id} style={{fontSize:"15px",lineHeight:1.5,color:"#6b5560",marginBottom:"4px"}}>"{x.text}"</div>)}
+      <div style={{borderTop:`0.5px solid ${wash.border}`,marginTop:"12px",paddingTop:"12px"}}>
+        {extraMoments.filter(x=>!x.primary_media_path&&!(x.text.startsWith("[")&&x.text.endsWith("]"))).map(x=><div key={x.id} style={{fontFamily:SERIF,fontSize:"15px",fontStyle:"italic",lineHeight:1.5,color:"#6b5560",marginBottom:"4px"}}>&#8220;{x.text}&#8221;</div>)}
       </div>
     )}
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px",position:"relative",zIndex:3}}><span style={{fontSize:"13px",fontFamily:S,fontWeight:700,color:A_CLR[m.author]||"#888"}}>{m.author}</span><div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>{Array.isArray(m.tags)&&m.tags.slice(0,3).map((t,i)=><span key={i} className="tag-f" style={{border:`1px solid ${wash.border}`}}>{t}</span>)}</div></div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px",position:"relative",zIndex:3,paddingTop:"14px",borderTop:"0.5px solid rgba(0,0,0,0.05)",marginTop:"6px"}}>
+      <span style={{fontSize:"12px",fontFamily:S,fontWeight:500,color:A_CLR[m.author]||"#7d6b62",letterSpacing:"0.3px"}}>— {m.author}</span>
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>{Array.isArray(m.tags)&&m.tags.slice(0,3).map((t,i)=><span key={i} style={{fontSize:"10px",fontFamily:S,fontWeight:500,padding:"3px 9px",borderRadius:"10px",border:"0.5px solid rgba(201,123,139,0.25)",color:"#8b6b75",letterSpacing:"0.2px"}}>{t}</span>)}</div>
+    </div>
     <Reactions mid={m.id} rx={reactions} onR={onReact} toast={toast}/>
     <Comments mid={m.id} comments={comments} onComment={onComment} toast={toast}/>
   </div>);
